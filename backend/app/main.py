@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .database import init_db
-from .routers import jobs, applications, profile, documents, ai, automation, auto_apply
+from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.include_router(documents.router)
 app.include_router(ai.router)
 app.include_router(automation.router)
 app.include_router(auto_apply.router)
+app.include_router(scheduler.router)
 
 # WebSocket route is registered inside automation router as /api/automation/ws/{session_id}
 
