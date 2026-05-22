@@ -34,6 +34,13 @@ app = FastAPI(
 
 import os
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+# Strip whitespace from origins
+allowed_origins = [origin.strip() for origin in allowed_origins]
+
+# For development, allow any vercel deployment
+if any("vercel.app" in origin for origin in allowed_origins):
+    # If any vercel.app domain is allowed, allow all vercel deployments
+    allowed_origins.extend(["*"])
 
 app.add_middleware(
     CORSMiddleware,
