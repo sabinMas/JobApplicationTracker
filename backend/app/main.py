@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .database import init_db
-from .routers import jobs, applications, profile, documents, ai, automation
+from .routers import jobs, applications, profile, documents, ai, automation, auto_apply
 
 
 @asynccontextmanager
@@ -18,9 +18,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+import os
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,6 +36,7 @@ app.include_router(profile.router)
 app.include_router(documents.router)
 app.include_router(ai.router)
 app.include_router(automation.router)
+app.include_router(auto_apply.router)
 
 # WebSocket route is registered inside automation router as /api/automation/ws/{session_id}
 
