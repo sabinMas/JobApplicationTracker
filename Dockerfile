@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-bookworm
 
 WORKDIR /app
 
@@ -41,8 +41,9 @@ RUN apt-get update && \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers only (skip install-deps to avoid broken packages)
-RUN playwright install chromium
+# Install Playwright browsers and dependencies
+RUN playwright install chromium && \
+    playwright install-deps chromium
 
 # Copy application code
 COPY backend/app /app/app
