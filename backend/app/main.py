@@ -1,15 +1,29 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import asyncio
 
 from .database import init_db
 from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler
 
 
+_db_initialized = False
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
+    # Initialize DB in background without blocking startup
+    global _db_initialized
+    asyncio.create_task(_init_db_background())
     yield
+
+
+async def _init_db_background():
+    global _db_initialized
+    try:
+        await init_db()
+        _db_initialized = True
+    except Exception as e:
+        print(f"DB init error (will retry on first request): {e}")
 
 
 app = FastAPI(
