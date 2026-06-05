@@ -2,9 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
+import os
 
+from .logging_config import setup_logging, get_logger
 from .database import init_db
 from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler
+
+# Initialize structured logging
+setup_logging(os.getenv("ENVIRONMENT", "development"))
+logger = get_logger(__name__)
 
 
 _db_initialized = False
@@ -20,10 +26,12 @@ async def lifespan(app: FastAPI):
 async def _init_db_background():
     global _db_initialized
     try:
+        logger.info("Initializing database...")
         await init_db()
         _db_initialized = True
+        logger.info("Database initialized successfully")
     except Exception as e:
-        print(f"DB init error (will retry on first request): {e}")
+        logger.error(f"DB init error (will retry on first request): {e}", extra_fields={"error": str(e)})
 
 
 app = FastAPI(
@@ -65,4 +73,5 @@ app.include_router(scheduler.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "JobApplicationTracker"}
+    logger.debug("Health check called")
+    return {"status": "ok", "service": "JobApplicationTracker", "db_initialized": _db_initialized}
