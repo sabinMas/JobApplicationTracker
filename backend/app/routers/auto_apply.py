@@ -1,6 +1,7 @@
 """
 Fully automated job application endpoint.
-Handles end-to-end automation: form filling, document upload, submission, and status tracking.
+Uses intelligent routing to select appropriate ATS handler (Greenhouse API, generic form filling, etc).
+Handles automatic retry on failure with exponential backoff.
 """
 import time
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +14,7 @@ from ..models import Application, Job, Profile, Document, ApplicationMetric
 from ..schemas import AutomationStartRequest
 from ..services import playwright_service, auto_submit
 from ..services.ats_integration import detect_ats_from_url
+from ..services.ats_routers import route_and_submit
 from ..services.retry_service import execute_with_retry, calculate_next_retry_time
 from ..logging_config import get_logger
 
@@ -22,48 +24,19 @@ router = APIRouter(prefix="/api/auto-apply", tags=["auto-apply"])
 
 async def _perform_auto_apply(
     application_id: int,
-    session_id: str,
-    app: Application,
     job: Job,
     profile: Profile,
+    app: Application,
     db: AsyncSession,
 ) -> dict:
     """
-    Core auto-apply logic (extracted for retry capability).
+    Core auto-apply logic using intelligent routing.
     
+    Routes to appropriate ATS handler (Greenhouse API, form filling, etc).
     Returns dict with status, message, and details.
     """
-    page = playwright_service._sessions[session_id]["page"]
     
-    # Step 1: Wait for form to load
-    logger.debug("Waiting for form to load", extra_fields={"application_id": application_id, "session_id": session_id})
-    form_loaded = await auto_submit.wait_for_form_load(page)
-
-    if not form_loaded:
-        logger.error("Form did not load", extra_fields={"application_id": application_id, "session_id": session_id})
-        raise Exception("Form did not load")
-
-    logger.info("Form loaded successfully", extra_fields={"application_id": application_id, "session_id": session_id})
-
-    # Step 2: Detect ATS platform
-    ats_type = detect_ats_from_url(job.apply_url)
-    logger.info("ATS platform detected", extra_fields={
-        "application_id": application_id,
-        "session_id": session_id,
-        "ats_platform": ats_type,
-    })
-
-    # Step 3: Detect and fill form fields
-    profile_dict = {k: v for k, v in profile.__dict__.items() if not k.startswith("_")}
-    logger.debug("Filling form fields", extra_fields={"application_id": application_id, "session_id": session_id})
-    filled_fields = await auto_submit.detect_and_fill_required_fields(page, profile_dict)
-    logger.info("Form fields filled", extra_fields={
-        "application_id": application_id,
-        "session_id": session_id,
-        "fields_filled": len(filled_fields),
-    })
-
-    # Step 4: Upload documents if available
+    # Get document paths
     resume_path = None
     cover_letter_path = None
 
@@ -75,7 +48,6 @@ async def _perform_auto_apply(
             logger.debug("Resume document found", extra_fields={
                 "application_id": application_id,
                 "document_id": doc.id,
-                "file_path": resume_path,
             })
 
     if app.tailored_cover_letter_id:
@@ -86,74 +58,39 @@ async def _perform_auto_apply(
             logger.debug("Cover letter document found", extra_fields={
                 "application_id": application_id,
                 "document_id": doc.id,
-                "file_path": cover_letter_path,
             })
 
-    if resume_path or cover_letter_path:
-        logger.info("Uploading documents", extra_fields={
-            "application_id": application_id,
-            "session_id": session_id,
-            "resume": bool(resume_path),
-            "cover_letter": bool(cover_letter_path),
-        })
-        await playwright_service.upload_documents(session_id, resume_path, cover_letter_path)
-
-    # Step 5: Submit application
-    logger.debug("Finding and clicking submit button", extra_fields={
+    # Convert profile to dict for routing
+    profile_dict = {k: v for k, v in profile.__dict__.items() if not k.startswith("_")}
+    
+    logger.debug("Routing application to appropriate handler", extra_fields={
         "application_id": application_id,
-        "session_id": session_id,
+        "job_url": job.apply_url,
     })
-    submission_success = await auto_submit.find_and_click_submit(page, ats_type)
-
-    if submission_success:
-        logger.info("Submit button clicked", extra_fields={"application_id": application_id, "session_id": session_id})
+    
+    # Use intelligent routing to find appropriate handler
+    result = await route_and_submit(
+        application_id=application_id,
+        job_url=job.apply_url,
+        profile=profile_dict,
+        resume_path=resume_path or "",
+        cover_letter_path=cover_letter_path or "",
+    )
+    
+    # If successful, update application status
+    if result.get("status") == "success":
+        app.status = "applied"
+        app.applied_date = datetime.now(timezone.utc)
+        await db.commit()
         
-        # Step 6: Verify submission
-        verified = await auto_submit.detect_submission_success(page)
-
-        if verified:
-            logger.info("Submission verified as successful", extra_fields={"application_id": application_id})
-            
-            # Update application status
-            app.status = "applied"
-            app.applied_date = datetime.now(timezone.utc)
-            await db.commit()
-
-            logger.info("Application status updated to 'applied'", extra_fields={
-                "application_id": application_id,
-                "timestamp": app.applied_date.isoformat(),
-            })
-
-            return {
-                "status": "success",
-                "message": "Application submitted successfully!",
-                "application_id": application_id,
-                "ats_platform": ats_type,
-                "fields_filled": len(filled_fields),
-            }
-        else:
-            logger.warning("Submission button clicked but success not verified", extra_fields={
-                "application_id": application_id,
-                "session_id": session_id,
-            })
-            return {
-                "status": "submitted_unverified",
-                "message": "Submission button clicked. Please verify in browser.",
-                "session_id": session_id,
-                "manual_review_required": True,
-            }
-    else:
-        logger.warning("Submit button not found", extra_fields={
+        logger.info("Application status updated to 'applied'", extra_fields={
             "application_id": application_id,
-            "session_id": session_id,
+            "timestamp": app.applied_date.isoformat(),
         })
-        return {
-            "status": "pending_submission",
-            "message": "Form filled but submit button not found. Manual review needed.",
-            "session_id": session_id,
-            "manual_review_required": True,
-            "filled_fields": filled_fields,
-        }
+    
+    return result
+
+
 @router.post("/full/{application_id}")
 async def full_auto_apply(
     application_id: int,
@@ -162,14 +99,9 @@ async def full_auto_apply(
     """
     Fully automated job application with automatic retry on failure.
     
-    Automatically:
-    1. Starts browser session
-    2. Fills all form fields
-    3. Uploads documents
-    4. Submits application
-    5. Verifies success
+    Uses intelligent routing to select appropriate ATS handler.
+    Automatically retries up to 3 times with exponential backoff on failure.
     
-    On failure, automatically retries up to 3 times with exponential backoff.
     Tracks metrics and error history for observability.
     """
     logger.info("Starting full auto-apply", extra_fields={"application_id": application_id})
@@ -204,22 +136,9 @@ async def full_auto_apply(
 
     # Determine attempt number
     attempt_number = app.retry_count + 1
-
-    session_id = None
     metric = None
 
     try:
-        # Start automation session
-        session_id = await playwright_service.start_session(
-            application_id=application_id,
-            apply_url=job.apply_url,
-        )
-        logger.info("Browser session started", extra_fields={
-            "application_id": application_id,
-            "session_id": session_id,
-            "attempt": attempt_number,
-        })
-
         # Create metric record
         metric = ApplicationMetric(
             application_id=application_id,
@@ -246,14 +165,13 @@ async def full_auto_apply(
         result = await execute_with_retry(
             _perform_auto_apply,
             application_id,
-            session_id,
-            app,
             job,
             profile,
+            app,
             db,
             max_attempts=3,
             on_retry_callback=retry_callback,
-            context_fields={"application_id": application_id, "session_id": session_id},
+            context_fields={"application_id": application_id},
         )
 
         # Update metrics
@@ -271,10 +189,6 @@ async def full_auto_apply(
             "duration_ms": duration_ms,
             "attempt_number": attempt_number,
         })
-
-        # Stop session
-        if session_id:
-            await playwright_service.stop_session(session_id)
 
         return result
 
@@ -324,13 +238,8 @@ async def full_auto_apply(
             metric.error_message = str(e)[:500]
             await db.commit()
 
-        # Stop session
-        if session_id:
-            await playwright_service.stop_session(session_id)
-
         logger.error("Exception during auto-apply", extra_fields={
             "application_id": application_id,
-            "session_id": session_id,
             "error": str(e),
             "error_type": type(e).__name__,
             "attempt": attempt_number,
