@@ -9,13 +9,20 @@ import os
 import re
 import time
 from typing import Optional
-from datetime import datetime, timezone
 import httpx
 
 from .base import ATSRouter
-from ..logging_config import get_logger
 
-logger = get_logger(__name__)
+# Defer logger creation until it's actually needed
+_logger = None
+
+
+def get_logger():
+    global _logger
+    if _logger is None:
+        from ...logging_config import get_logger as create_logger
+        _logger = create_logger(__name__)
+    return _logger
 
 
 class GreenhouseRouter(ATSRouter):
@@ -40,6 +47,7 @@ class GreenhouseRouter(ATSRouter):
         """Submit application via Greenhouse API"""
         
         start_time = time.time()
+        logger = get_logger()
         
         try:
             # Extract job ID from URL
@@ -109,7 +117,7 @@ class GreenhouseRouter(ATSRouter):
                 logger.warning(error_msg, extra_fields={
                     "application_id": application_id,
                     "status_code": resp.status_code,
-                    "response": resp.text[:500],  # First 500 chars
+                    "response": resp.text[:500],
                     "duration_ms": duration_ms,
                 })
                 return {

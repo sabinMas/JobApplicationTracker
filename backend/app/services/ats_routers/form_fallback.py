@@ -4,23 +4,30 @@ Form filler fallback router.
 Generic form filler for unknown ATS platforms using Playwright.
 This router always accepts requests and serves as the last resort
 when no platform-specific router can handle the job URL.
+
+NOTE: This is a stub implementation. The actual form filling logic
+from the existing auto_apply.py will be integrated here in future updates.
 """
 
 import time
 from typing import Optional
 
 from .base import ATSRouter
-from ..playwright_service import PlaywrightService
-from ..logging_config import get_logger
 
-logger = get_logger(__name__)
+# Defer logger creation until it's actually needed
+_logger = None
+
+
+def get_logger():
+    global _logger
+    if _logger is None:
+        from ...logging_config import get_logger as create_logger
+        _logger = create_logger(__name__)
+    return _logger
 
 
 class FormFillerRouter(ATSRouter):
     """Generic form filler for unknown ATS platforms"""
-    
-    def __init__(self):
-        self.playwright_service = PlaywrightService()
     
     async def can_handle(self, apply_url: str) -> bool:
         """
@@ -41,41 +48,40 @@ class FormFillerRouter(ATSRouter):
         """
         Submit application using generic form filling with Playwright.
         
-        This implements the full form detection and filling logic
-        that was previously in auto_apply.py
+        This is a stub implementation. The actual form detection and filling logic
+        from the existing auto_apply.py will be integrated here in future updates.
+        
+        For now, returns a "not_implemented" status to indicate this handler
+        exists but the full implementation is pending integration.
         """
         
         start_time = time.time()
+        logger = get_logger()
         
         try:
-            logger.info("Starting generic form filling", extra_fields={
+            logger.info("Form filling router invoked (stub implementation)", extra_fields={
                 "application_id": application_id,
                 "job_url": job_url,
             })
             
-            # Use existing playwright logic
-            # This delegates to the playwright_service
-            result = await self.playwright_service.fill_and_submit_form(
-                application_id=application_id,
-                job_url=job_url,
-                profile=profile,
-                resume_path=resume_path,
-                cover_letter_path=cover_letter_path,
-            )
+            # TODO: Integrate actual form filling logic from auto_apply.py
+            # This will include:
+            # - Starting Playwright session
+            # - Detecting form fields
+            # - Filling fields with profile data
+            # - Uploading documents
+            # - Finding and clicking submit button
+            # - Verifying submission success
             
             duration_ms = int((time.time() - start_time) * 1000)
             
-            # Add timing and ensure proper format
-            result["duration_ms"] = duration_ms
-            result["ats_platform"] = result.get("ats_platform", "unknown")
-            
-            logger.info("Form filling completed", extra_fields={
-                "application_id": application_id,
-                "status": result.get("status"),
+            return {
+                "status": "failed",
                 "duration_ms": duration_ms,
-            })
-            
-            return result
+                "message": "Form filling router not fully implemented yet",
+                "ats_platform": "unknown",
+                "error_message": "Form filler stub - awaiting Playwright integration",
+            }
         
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)

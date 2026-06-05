@@ -23,9 +23,17 @@ Usage:
 
 from .form_fallback import FormFillerRouter
 from .greenhouse import GreenhouseRouter
-from ..logging_config import get_logger
 
-logger = get_logger(__name__)
+# Defer logger creation until it's actually needed
+_logger = None
+
+
+def get_logger():
+    global _logger
+    if _logger is None:
+        from ...logging_config import get_logger as create_logger
+        _logger = create_logger(__name__)
+    return _logger
 
 # Router instances (order matters - checked in order)
 _routers = [
@@ -54,6 +62,7 @@ async def route_and_submit(
     Returns:
         Result dict with status, message, platform, etc.
     """
+    logger = get_logger()
     
     # Try each router in order
     for router in _routers:
