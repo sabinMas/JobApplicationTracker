@@ -62,6 +62,14 @@ class Application(Base):
     tailored_resume_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
     tailored_cover_letter_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
     automation_log = Column(JSON, default=list)   # [{step, status, message, timestamp}]
+    
+    # Retry tracking
+    retry_count = Column(Integer, default=0)
+    last_error = Column(Text, nullable=True)
+    error_history = Column(JSON, default=list)  # [{timestamp, error, attempt, error_type}]
+    last_retry_at = Column(DateTime(timezone=True), nullable=True)
+    next_retry_at = Column(DateTime(timezone=True), nullable=True)
+    
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -84,3 +92,31 @@ class Document(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     job = relationship("Job", back_populates="documents")
+
+
+class ApplicationMetric(Base):
+    """Track each application submission attempt for analytics."""
+    __tablename__ = "application_metrics"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
+    attempt_number = Column(Integer, default=1)  # Retry count
+    
+    # Timing
+    start_time = Column(DateTime(timezone=True), server_default=func.now())
+    end_time = Column(DateTime(timezone=True), nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    
+    # Status
+    status = Column(String(50))  # success / failed / pending / submitted_unverified
+    error_message = Column(Text, nullable=True)
+    ats_platform_detected = Column(String(50))
+    
+    # AI metrics
+    form_fields_detected = Column(Integer, nullable=True)
+    fields_filled = Column(Integer, nullable=True)
+    
+    # Debug
+    log_entries = Column(JSON, default=list)  # [{timestamp, step, message}]
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
