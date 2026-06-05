@@ -6,7 +6,7 @@ import os
 
 from .logging_config import setup_logging, get_logger
 from .database import init_db
-from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler
+from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics
 
 # Initialize structured logging
 setup_logging(os.getenv("ENVIRONMENT", "development"))
@@ -67,6 +67,7 @@ app.include_router(ai.router)
 app.include_router(automation.router)
 app.include_router(auto_apply.router)
 app.include_router(scheduler.router)
+app.include_router(metrics.router)
 
 # WebSocket route is registered inside automation router as /api/automation/ws/{session_id}
 
