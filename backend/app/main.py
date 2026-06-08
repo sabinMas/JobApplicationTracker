@@ -6,12 +6,13 @@ import os
 
 from .logging_config import setup_logging, get_logger
 from .database import init_db
-from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics, dashboard, auto_apply_scored, scraper
+from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics, dashboard, auto_apply_scored, scraper, job_enrichment
 from .services.job_sources import JobSourceManager, RSSJobSource
 from .services.job_sync_scheduler import JobSyncScheduler, set_scheduler
 from .services.actor_framework import actor_registry
 from .scrapers.test_actor import TestActor
 from .scrapers.linkedin_actor import LinkedInActor
+from .scrapers.indeed_actor import IndeedActor
 
 # Initialize structured logging
 setup_logging(os.getenv("ENVIRONMENT", "development"))
@@ -26,6 +27,7 @@ def _init_actors():
     try:
         actor_registry.register(TestActor())
         actor_registry.register(LinkedInActor())
+        actor_registry.register(IndeedActor())
         logger.info("Actors initialized successfully")
     except Exception as e:
         logger.error(f"Actor init error: {e}", extra_fields={"error": str(e)})
@@ -109,6 +111,7 @@ app.include_router(metrics.router)
 app.include_router(dashboard.router)  # Phase 4: Dashboard API
 app.include_router(auto_apply_scored.router)  # Phase 4: Scoring integration
 app.include_router(scraper.router)  # Actor-based scraper framework
+app.include_router(job_enrichment.router)  # Phase 5: Job enrichment pipeline
 
 # WebSocket route is registered inside automation router as /api/automation/ws/{session_id}
 
