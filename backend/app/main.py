@@ -10,7 +10,7 @@ from .routers import jobs, applications, profile, documents, ai, automation, aut
 from .services.job_sources import JobSourceManager, RSSJobSource
 from .services.job_sync_scheduler import JobSyncScheduler, set_scheduler
 from .services.actor_framework import actor_registry
-from .scrapers.linkedin_actor import LinkedInActor
+# from .scrapers.linkedin_actor import LinkedInActor  # TODO: Fix PlaywrightService import
 
 # Initialize structured logging
 setup_logging(os.getenv("ENVIRONMENT", "development"))
@@ -23,7 +23,7 @@ _job_sync_scheduler = None
 def _init_actors():
     """Register all available actors."""
     try:
-        actor_registry.register(LinkedInActor())
+        # actor_registry.register(LinkedInActor())  # TODO: Fix PlaywrightService import
         logger.info("Actors initialized successfully")
     except Exception as e:
         logger.error(f"Actor init error: {e}", extra_fields={"error": str(e)})

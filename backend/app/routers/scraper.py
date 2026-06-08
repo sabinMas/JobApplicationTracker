@@ -5,11 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.database import get_session
+from app.database import get_db
 from app.models import ScraperRun, Dataset, Actor as ActorModel
 from app.services.actor_framework import actor_registry
 from app.services.actor_runner import enqueue_actor_run
-from app.schemas import BaseSchema
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/scraper", tags=["scraper"])
@@ -22,7 +21,7 @@ class RunInput(BaseModel):
     webhook_url: Optional[str] = None
 
 
-class RunResponse(BaseSchema):
+class RunResponse(BaseModel):
     id: int
     actor_name: str
     run_name: str
@@ -52,7 +51,7 @@ class ActorListResponse(BaseModel):
 @router.post("/run")
 async def create_run(
     payload: RunInput,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ) -> RunResponse:
     """Start a scraper run."""
     try:
@@ -76,7 +75,7 @@ async def create_run(
 @router.get("/run/{run_id}")
 async def get_run(
     run_id: int,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ) -> RunDetailResponse:
     """Get run details and status."""
     stmt = select(ScraperRun).where(ScraperRun.id == run_id)
@@ -94,7 +93,7 @@ async def list_runs(
     actor_name: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = 50,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ) -> list[RunResponse]:
     """List scraper runs with optional filtering."""
     stmt = select(ScraperRun)
@@ -131,7 +130,7 @@ async def list_actors() -> list[ActorListResponse]:
 @router.get("/dataset/{dataset_id}")
 async def get_dataset(
     dataset_id: int,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Get dataset metadata and S3 location."""
     stmt = select(Dataset).where(Dataset.id == dataset_id)

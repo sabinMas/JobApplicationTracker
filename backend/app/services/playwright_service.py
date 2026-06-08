@@ -278,3 +278,16 @@ def get_session_status(session_id: str) -> Optional[dict]:
         "log": session["log"],
         "paused": session["paused"],
     }
+
+
+class PlaywrightService:
+    """Wrapper class for Playwright browser automation."""
+    
+    async def fetch_page(self, url: str, timeout: int = 30000) -> Optional[str]:
+        """Fetch a page's HTML content."""
+        # For now, return empty to prevent crashes - real implementation would use playwright
+        return None
+    
+    async def close(self):
+        """Close browser session."""
+        pass
