@@ -3,4 +3,279 @@ Auto-Apply with AgentCore Scoring Integration
 
 This router combines job scoring with auto-apply workflow.
 Only submits applications to jobs scoring >= min_score (default 8/10).
-\"\"\"\n\nfrom fastapi import APIRouter, Depends, Query\nfrom sqlalchemy.ext.asyncio import AsyncSession\nfrom sqlalchemy import select\nfrom datetime import datetime\nimport logging\n\nfrom ..database import get_db\nfrom ..models import Job, Application, Profile\nfrom ..services.auto_apply_with_scoring import get_scoring_filter\nfrom ..services.job_scorer import get_scorer\n\nlogger = logging.getLogger(__name__)\nrouter = APIRouter(prefix=\"/api/auto-apply-scored\", tags=[\"auto-apply-scored\"])\n\n\n@router.post(\"/score-jobs\")\nasync def score_all_jobs(\n    min_date: str = Query(None, description=\"Score jobs since this date (ISO format)\"),\n    limit: int = Query(100, description=\"Maximum jobs to score\"),\n    db: AsyncSession = Depends(get_db),\n) -> dict:\n    \"\"\"\n    Score unscored jobs and store results in database.\n    \n    Returns:\n        {\n            \"total_scored\": 50,\n            \"total_errors\": 2,\n            \"average_score\": 7.2,\n            \"high_score_count\": 15,  # >= 8\n            \"medium_score_count\": 25, # 5-7\n            \"low_score_count\": 10,    # < 5\n            \"error_details\": [...]\n        }\n    \"\"\"\n    try:\n        # Get unscored jobs\n        query = select(Job).where(Job.score.is_(None)).order_by(Job.created_at.desc()).limit(limit)\n        \n        if min_date:\n            query = query.where(Job.created_at >= min_date)\n        \n        result = await db.execute(query)\n        jobs = result.scalars().all()\n        \n        if not jobs:\n            logger.info(\"No unscored jobs found\")\n            return {\n                \"total_scored\": 0,\n                \"total_errors\": 0,\n                \"message\": \"No unscored jobs found\"\n            }\n        \n        logger.info(f\"Found {len(jobs)} unscored jobs to score\")\n        \n        scorer = await get_scorer()\n        scores = []\n        errors = []\n        \n        for job in jobs:\n            try:\n                # Score the job\n                score_result = await scorer.score_job(\n                    job_title=job.title,\n                    company=job.company,\n                    description=job.description or \"\",\n                    location=job.location,\n                )\n                \n                # Store in database\n                job.score = int(score_result[\"score\"])\n                job.score_reasoning = score_result.get(\"reasoning\", \"\")\n                job.score_strengths = score_result.get(\"strengths\", [])\n                job.score_concerns = score_result.get(\"concerns\", [])\n                job.score_recommendation = score_result.get(\"recommendation\", \"SKIP\")\n                job.scored_at = datetime.utcnow()\n                \n                scores.append(job.score)\n                logger.debug(f\"Scored job {job.id}: {job.score}/10\")\n                \n            except Exception as e:\n                error_msg = f\"Error scoring job {job.id}: {str(e)}\"\n                logger.error(error_msg)\n                errors.append({\"job_id\": job.id, \"error\": error_msg})\n        \n        # Commit all scoring updates\n        await db.commit()\n        \n        # Calculate statistics\n        avg_score = sum(scores) / len(scores) if scores else 0\n        high_score_count = sum(1 for s in scores if s >= 8)\n        medium_score_count = sum(1 for s in scores if 5 <= s < 8)\n        low_score_count = sum(1 for s in scores if s < 5)\n        \n        return {\n            \"total_scored\": len(scores),\n            \"total_errors\": len(errors),\n            \"average_score\": round(avg_score, 2),\n            \"high_score_count\": high_score_count,\n            \"medium_score_count\": medium_score_count,\n            \"low_score_count\": low_score_count,\n            \"score_distribution\": {\n                \"high\": high_score_count,\n                \"medium\": medium_score_count,\n                \"low\": low_score_count\n            },\n            \"error_details\": errors if errors else None,\n            \"message\": f\"Scored {len(scores)} jobs\" + (f\" with {len(errors)} errors\" if errors else \"\")\n        }\n        \n    except Exception as e:\n        logger.error(f\"Error in score_all_jobs: {e}\")\n        return {\"error\": str(e)}\n\n\n@router.get(\"/filter-high-score\")\nasync def get_high_score_jobs(\n    min_score: int = Query(8, ge=1, le=10),\n    limit: int = Query(50, ge=1, le=100),\n    db: AsyncSession = Depends(get_db),\n) -> dict:\n    \"\"\"\n    Get jobs that meet minimum score threshold (ready to apply).\n    \n    Returns:\n        {\n            \"jobs\": [...],\n            \"total_ready\": 15,\n            \"message\": \"15 jobs ready to apply\"\n        }\n    \"\"\"\n    try:\n        result = await db.execute(\n            select(Job)\n            .where(\n                (Job.score >= min_score)\n                & (Job.score.isnot(None))\n            )\n            .order_by(Job.score.desc())\n            .limit(limit)\n        )\n        \n        jobs = result.scalars().all()\n        \n        return {\n            \"jobs\": [\n                {\n                    \"id\": job.id,\n                    \"title\": job.title,\n                    \"company\": job.company,\n                    \"score\": job.score,\n                    \"reasoning\": job.score_reasoning,\n                    \"strengths\": job.score_strengths,\n                    \"concerns\": job.score_concerns,\n                    \"apply_url\": job.apply_url\n                }\n                for job in jobs\n            ],\n            \"total_ready\": len(jobs),\n            \"message\": f\"{len(jobs)} jobs ready to apply\"\n        }\n        \n    except Exception as e:\n        logger.error(f\"Error in get_high_score_jobs: {e}\")\n        return {\"error\": str(e)}\n\n\n@router.get(\"/scoring-stats\")\nasync def get_scoring_stats(\n    db: AsyncSession = Depends(get_db),\n) -> dict:\n    \"\"\"\n    Get overall scoring statistics.\n    \n    Returns:\n        {\n            \"total_jobs\": 150,\n            \"scored_jobs\": 140,\n            \"unscored_jobs\": 10,\n            \"percentage_scored\": 93.3,\n            \"ready_to_apply\": 45,  # Score >= 8\n            \"risky_jobs\": 50,      # Score 5-7\n            \"skip_jobs\": 45,       # Score < 5\n            \"average_score\": 6.8\n        }\n    \"\"\"\n    try:\n        from sqlalchemy import func\n        \n        # Total jobs\n        total_result = await db.execute(select(func.count(Job.id)))\n        total_jobs = total_result.scalar() or 0\n        \n        # Scored jobs\n        scored_result = await db.execute(\n            select(func.count(Job.id)).where(Job.score.isnot(None))\n        )\n        scored_jobs = scored_result.scalar() or 0\n        \n        # Average score\n        avg_result = await db.execute(\n            select(func.avg(Job.score)).where(Job.score.isnot(None))\n        )\n        avg_score = float(avg_result.scalar() or 0)\n        \n        # Score distribution\n        high_result = await db.execute(\n            select(func.count(Job.id)).where(Job.score >= 8)\n        )\n        high_score = high_result.scalar() or 0\n        \n        medium_result = await db.execute(\n            select(func.count(Job.id)).where((Job.score >= 5) & (Job.score < 8))\n        )\n        medium_score = medium_result.scalar() or 0\n        \n        low_result = await db.execute(\n            select(func.count(Job.id)).where(Job.score < 5)\n        )\n        low_score = low_result.scalar() or 0\n        \n        unscored_jobs = total_jobs - scored_jobs\n        percentage_scored = (scored_jobs / total_jobs * 100) if total_jobs > 0 else 0\n        \n        return {\n            \"total_jobs\": total_jobs,\n            \"scored_jobs\": scored_jobs,\n            \"unscored_jobs\": unscored_jobs,\n            \"percentage_scored\": round(percentage_scored, 1),\n            \"ready_to_apply\": high_score,\n            \"risky_jobs\": medium_score,\n            \"skip_jobs\": low_score,\n            \"average_score\": round(avg_score, 2),\n            \"timestamp\": datetime.utcnow().isoformat()\n        }\n        \n    except Exception as e:\n        logger.error(f\"Error in get_scoring_stats: {e}\")\n        return {\"error\": str(e)}\n"
+"""
+
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from datetime import datetime
+import logging
+
+from ..database import get_db
+from ..models import Job, Application, Profile
+from ..services.auto_apply_with_scoring import get_scoring_filter
+from ..services.job_scorer import get_scorer
+from ..schemas import (
+    ScoreJobsOut,
+    ScoreJobsRequest,
+    HighScoreFilterRequest,
+    ScoringHealthOut,
+    HighScoreJobsOut,
+    JobByScoreOut,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/auto-apply-scored", tags=["auto-apply-scored"])
+
+
+@router.post("/score-jobs", response_model=ScoreJobsOut)
+async def score_all_jobs(
+    min_date: str = Query(None, description="Score jobs since this date (ISO format)"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum jobs to score"),
+    db: AsyncSession = Depends(get_db),
+) -> ScoreJobsOut:
+    """
+    Score unscored jobs using AgentCore and store results in database.
+
+    Args:
+        min_date: ISO format date string to filter jobs
+        limit: Maximum number of jobs to score (1-500)
+        db: Database session
+
+    Returns:
+        ScoreJobsOut with scoring results and distribution
+
+    Raises:
+        HTTPException: On database or scoring errors
+    """
+    try:
+        # Get unscored jobs
+        query = select(Job).where(Job.score.is_(None)).order_by(Job.created_at.desc()).limit(limit)
+
+        if min_date:
+            try:
+                min_datetime = datetime.fromisoformat(min_date)
+                query = query.where(Job.created_at >= min_datetime)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400, detail="Invalid date format. Use ISO format (YYYY-MM-DD)"
+                )
+
+        result = await db.execute(query)
+        jobs = result.scalars().all()
+
+        if not jobs:
+            logger.info("No unscored jobs found")
+            return ScoreJobsOut(
+                jobs_processed=0,
+                jobs_newly_scored=0,
+                jobs_skipped=0,
+                errors=0,
+                score_distribution={},
+                avg_score=None,
+            )
+
+        logger.info(f"Found {len(jobs)} unscored jobs to score", extra={"count": len(jobs)})
+
+        scorer = await get_scorer()
+        scores = []
+        errors = 0
+
+        for job in jobs:
+            try:
+                # Score the job
+                score_result = await scorer.score_job(
+                    job_title=job.title,
+                    company=job.company,
+                    description=job.description or "",
+                    location=job.location,
+                )
+
+                # Store in database
+                job.score = int(score_result["score"])
+                job.score_reasoning = score_result.get("reasoning", "")
+                job.score_strengths = score_result.get("strengths", [])
+                job.score_concerns = score_result.get("concerns", [])
+                job.score_recommendation = score_result.get("recommendation", "SKIP")
+                job.scored_at = datetime.utcnow()
+
+                scores.append(job.score)
+                logger.debug(f"Scored job {job.id}: {job.score}/10")
+
+            except Exception as e:
+                error_msg = f"Error scoring job {job.id}: {str(e)}"
+                logger.error(error_msg, extra={"job_id": job.id})
+                errors += 1
+
+        # Commit all scoring updates
+        await db.commit()
+
+        # Calculate statistics
+        avg_score = sum(scores) / len(scores) if scores else None
+        high_score_count = sum(1 for s in scores if s >= 8)
+        medium_score_count = sum(1 for s in scores if 5 <= s < 8)
+        low_score_count = sum(1 for s in scores if s < 5)
+
+        return ScoreJobsOut(
+            jobs_processed=len(jobs),
+            jobs_newly_scored=len(scores),
+            jobs_skipped=len(jobs) - len(scores) - errors,
+            errors=errors,
+            score_distribution={
+                "high (8-10)": high_score_count,
+                "medium (5-7)": medium_score_count,
+                "low (1-4)": low_score_count,
+            },
+            avg_score=round(avg_score, 2) if avg_score else None,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error in score_all_jobs", extra={"error": str(e)})
+        raise HTTPException(status_code=500, detail="Failed to score jobs")
+
+
+@router.get("/filter-high-score", response_model=HighScoreJobsOut)
+async def get_high_score_jobs(
+    min_score: int = Query(8, ge=1, le=10, description="Minimum score threshold"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> HighScoreJobsOut:
+    """
+    Get jobs that meet minimum score threshold (ready to apply).
+
+    Args:
+        min_score: Minimum score threshold (1-10)
+        skip: Number of results to skip
+        limit: Number of results to return (1-100)
+        db: Database session
+
+    Returns:
+        HighScoreJobsOut with high-scoring jobs
+
+    Raises:
+        HTTPException: On database errors
+    """
+    try:
+        # Get total count
+        count_result = await db.execute(
+            select(func.count(Job.id)).where(
+                (Job.score >= min_score) & (Job.score.isnot(None))
+            )
+        )
+        total_count = count_result.scalar() or 0
+
+        # Get paginated results
+        result = await db.execute(
+            select(Job)
+            .where((Job.score >= min_score) & (Job.score.isnot(None)))
+            .order_by(Job.score.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+
+        jobs = result.scalars().all()
+
+        jobs_out = [
+            JobByScoreOut(
+                id=job.id,
+                title=job.title,
+                company=job.company,
+                location=job.location,
+                score=job.score,
+                score_reasoning=job.score_reasoning,
+                score_strengths=job.score_strengths or [],
+                score_concerns=job.score_concerns or [],
+                score_recommendation=job.score_recommendation,
+                apply_url=job.apply_url,
+                source=job.source,
+            )
+            for job in jobs
+        ]
+
+        return HighScoreJobsOut(
+            total_available=total_count,
+            jobs=jobs_out,
+            min_score_threshold=min_score,
+        )
+
+    except Exception as e:
+        logger.error(
+            "Error filtering high-score jobs", extra={"error": str(e), "min_score": min_score}
+        )
+        raise HTTPException(status_code=500, detail="Failed to filter jobs")
+
+
+@router.get("/scoring-stats", response_model=ScoringHealthOut)
+async def get_scoring_stats(
+    db: AsyncSession = Depends(get_db),
+) -> ScoringHealthOut:
+    """
+    Get overall scoring system health and statistics.
+
+    Args:
+        db: Database session
+
+    Returns:
+        ScoringHealthOut with comprehensive scoring metrics
+
+    Raises:
+        HTTPException: On database errors
+    """
+    try:
+        # Total jobs
+        total_result = await db.execute(select(func.count(Job.id)))
+        total_jobs = total_result.scalar() or 0
+
+        # Scored jobs
+        scored_result = await db.execute(
+            select(func.count(Job.id)).where(Job.score.isnot(None))
+        )
+        scored_jobs = scored_result.scalar() or 0
+
+        # Average score
+        avg_result = await db.execute(
+            select(func.avg(Job.score)).where(Job.score.isnot(None))
+        )
+        avg_score = float(avg_result.scalar() or 0)
+
+        # Score distribution
+        high_result = await db.execute(
+            select(func.count(Job.id)).where(Job.score >= 8)
+        )
+        high_score = high_result.scalar() or 0
+
+        medium_result = await db.execute(
+            select(func.count(Job.id)).where((Job.score >= 5) & (Job.score < 8))
+        )
+        medium_score = medium_result.scalar() or 0
+
+        low_result = await db.execute(
+            select(func.count(Job.id)).where(Job.score < 5)
+        )
+        low_score = low_result.scalar() or 0
+
+        unscored_jobs = total_jobs - scored_jobs
+        percentage_scored = (scored_jobs / total_jobs * 100) if total_jobs > 0 else 0.0
+
+        return ScoringHealthOut(
+            total_jobs=total_jobs,
+            scored_jobs=scored_jobs,
+            unscored_jobs=unscored_jobs,
+            percentage_scored=round(percentage_scored, 2),
+            score_distribution={
+                "high (8-10)": high_score,
+                "medium (5-7)": medium_score,
+                "low (1-4)": low_score,
+            },
+            avg_score=round(avg_score, 2) if avg_score > 0 else None,
+            high_score_count=high_score,
+            low_score_count=low_score,
+            timestamp=datetime.utcnow(),
+        )
+
+    except Exception as e:
+        logger.error("Error getting scoring statistics", extra={"error": str(e)})
+        raise HTTPException(status_code=500, detail="Failed to retrieve scoring statistics")

@@ -1,1 +1,362 @@
-\"\"\"Dashboard API endpoints for metrics and analytics\"\"\"\n\nfrom fastapi import APIRouter, Depends, Query\nfrom sqlalchemy.ext.asyncio import AsyncSession\nfrom sqlalchemy import select, func\nfrom datetime import datetime, timedelta\nimport logging\nfrom ..database import get_db\nfrom ..models import Job, Application, ApplicationMetric\nfrom ..schemas import (\n    JobSchema,\n    ApplicationSchema,\n)\n\nlogger = logging.getLogger(__name__)\nrouter = APIRouter(prefix=\"/api/dashboard\", tags=[\"dashboard\"])\n\n\nclass DashboardMetrics:\n    \"\"\"Container for dashboard metrics\"\"\"\n\n    total_jobs_discovered: int\n    total_applications: int\n    successful_submissions: int\n    failed_submissions: int\n    success_rate: float\n    average_score: float\n    score_distribution: dict\n    by_ats_platform: dict\n    by_source: dict\n    by_status: dict\n    recent_applications: list\n    scoring_stats: dict\n\n\n@router.get(\"/metrics\")\nasync def get_metrics(\n    days: int = Query(7, description=\"Number of days to include\"),\n    db: AsyncSession = Depends(get_db),\n) -> dict:\n    \"\"\"\n    Get comprehensive dashboard metrics\n\n    Returns:\n        {\n            \"total_jobs_discovered\": 150,\n            \"total_applications\": 42,\n            \"successful_submissions\": 38,\n            \"failed_submissions\": 4,\n            \"success_rate\": 0.9048,\n            \"average_score\": 7.8,\n            \"score_distribution\": {\"high\": 30, \"medium\": 8, \"low\": 2},\n            \"by_ats_platform\": {...},\n            \"by_source\": {...},\n            \"by_status\": {...},\n            \"recent_applications\": [...],\n            \"scoring_stats\": {...}\n        }\n    \"\"\"\n    try:\n        start_date = datetime.utcnow() - timedelta(days=days)\n\n        # Total jobs and applications\n        jobs_result = await db.execute(\n            select(func.count(Job.id)).where(Job.created_at >= start_date)\n        )\n        total_jobs = jobs_result.scalar() or 0\n\n        apps_result = await db.execute(\n            select(func.count(Application.id)).where(Application.created_at >= start_date)\n        )\n        total_apps = apps_result.scalar() or 0\n\n        # Success/failure counts\n        success_result = await db.execute(\n            select(func.count(ApplicationMetric.id)).where(\n                (ApplicationMetric.created_at >= start_date)\n                & (ApplicationMetric.status == \"success\")\n            )\n        )\n        successful = success_result.scalar() or 0\n\n        failed_result = await db.execute(\n            select(func.count(ApplicationMetric.id)).where(\n                (ApplicationMetric.created_at >= start_date)\n                & (ApplicationMetric.status == \"failed\")\n            )\n        )\n        failed = failed_result.scalar() or 0\n\n        success_rate = successful / (successful + failed) if (successful + failed) > 0 else 0\n\n        # Average score\n        score_result = await db.execute(\n            select(func.avg(Job.score)).where(\n                (Job.created_at >= start_date) & (Job.score.isnot(None))\n            )\n        )\n        avg_score = float(score_result.scalar() or 0)\n\n        # Score distribution\n        high_score_result = await db.execute(\n            select(func.count(Job.id)).where(\n                (Job.created_at >= start_date) & (Job.score >= 8)\n            )\n        )\n        high_scores = high_score_result.scalar() or 0\n\n        medium_score_result = await db.execute(\n            select(func.count(Job.id)).where(\n                (Job.created_at >= start_date)\n                & (Job.score >= 5)\n                & (Job.score < 8)\n            )\n        )\n        medium_scores = medium_score_result.scalar() or 0\n\n        low_score_result = await db.execute(\n            select(func.count(Job.id)).where(\n                (Job.created_at >= start_date) & (Job.score < 5)\n            )\n        )\n        low_scores = low_score_result.scalar() or 0\n\n        # By ATS platform\n        ats_result = await db.execute(\n            select(Application.ats_platform, func.count(Application.id)).where(\n                Application.created_at >= start_date\n            ).group_by(Application.ats_platform)\n        )\n        ats_data = dict(ats_result.all())\n\n        # By job source\n        source_result = await db.execute(\n            select(Job.source, func.count(Job.id)).where(\n                Job.created_at >= start_date\n            ).group_by(Job.source)\n        )\n        source_data = dict(source_result.all())\n\n        # By application status\n        status_result = await db.execute(\n            select(Application.status, func.count(Application.id)).where(\n                Application.created_at >= start_date\n            ).group_by(Application.status)\n        )\n        status_data = dict(status_result.all())\n\n        # Recent applications\n        recent_result = await db.execute(\n            select(Application).where(\n                Application.created_at >= start_date\n            ).order_by(Application.created_at.desc()).limit(10)\n        )\n        recent_apps = [ApplicationSchema.from_orm(app) for app in recent_result.scalars()]\n\n        return {\n            \"period_days\": days,\n            \"total_jobs_discovered\": total_jobs,\n            \"total_applications\": total_apps,\n            \"successful_submissions\": successful,\n            \"failed_submissions\": failed,\n            \"success_rate\": round(success_rate, 4),\n            \"average_score\": round(avg_score, 2),\n            \"score_distribution\": {\n                \"high\": high_scores,\n                \"medium\": medium_scores,\n                \"low\": low_scores,\n            },\n            \"by_ats_platform\": ats_data,\n            \"by_source\": source_data,\n            \"by_status\": status_data,\n            \"recent_applications\": [app.dict() for app in recent_apps],\n            \"timestamp\": datetime.utcnow().isoformat(),\n        }\n\n    except Exception as e:\n        logger.error(f\"Error getting metrics: {e}\")\n        return {\"error\": str(e), \"timestamp\": datetime.utcnow().isoformat()}\n\n\n@router.get(\"/jobs/by-score\")\nasync def get_jobs_by_score(\n    min_score: int = Query(1, ge=1, le=10),\n    max_score: int = Query(10, ge=1, le=10),\n    limit: int = Query(50, ge=1, le=100),\n    db: AsyncSession = Depends(get_db),\n) -> list:\n    \"\"\"\n    Get jobs filtered by score range\n    \"\"\"\n    try:\n        result = await db.execute(\n            select(Job)\n            .where(\n                (Job.score >= min_score)\n                & (Job.score <= max_score)\n                & (Job.score.isnot(None))\n            )\n            .order_by(Job.score.desc())\n            .limit(limit)\n        )\n        jobs = result.scalars().all()\n        return [JobSchema.from_orm(job).dict() for job in jobs]\n\n    except Exception as e:\n        logger.error(f\"Error getting jobs by score: {e}\")\n        return [{\"error\": str(e)}]\n\n\n@router.get(\"/jobs/scored-vs-unscored\")\nasync def get_scored_vs_unscored(\n    days: int = Query(7),\n    db: AsyncSession = Depends(get_db),\n) -> dict:\n    \"\"\"\n    Get count of scored vs unscored jobs\n    \"\"\"\n    try:\n        start_date = datetime.utcnow() - timedelta(days=days)\n\n        scored_result = await db.execute(\n            select(func.count(Job.id)).where(\n                (Job.created_at >= start_date) & (Job.score.isnot(None))\n            )\n        )\n        scored = scored_result.scalar() or 0\n\n        unscored_result = await db.execute(\n            select(func.count(Job.id)).where(\n                (Job.created_at >= start_date) & (Job.score.is_(None))\n            )\n        )\n        unscored = unscored_result.scalar() or 0\n\n        return {\n            \"scored\": scored,\n            \"unscored\": unscored,\n            \"total\": scored + unscored,\n            \"percentage_scored\": round(\n                (scored / (scored + unscored) * 100) if (scored + unscored) > 0 else 0, 2\n            ),\n        }\n\n    except Exception as e:\n        logger.error(f\"Error getting scored vs unscored: {e}\")\n        return {\"error\": str(e)}\n\n\n@router.get(\"/applications/timeline\")\nasync def get_applications_timeline(\n    days: int = Query(7),\n    db: AsyncSession = Depends(get_db),\n) -> list:\n    \"\"\"\n    Get applications over time (for timeline chart)\n    \"\"\"\n    try:\n        start_date = datetime.utcnow() - timedelta(days=days)\n\n        result = await db.execute(\n            select(\n                func.date(Application.created_at).label(\"date\"),\n                func.count(Application.id).label(\"count\"),\n            )\n            .where(Application.created_at >= start_date)\n            .group_by(func.date(Application.created_at))\n            .order_by(func.date(Application.created_at))\n        )\n\n        timeline = [\n            {\"date\": str(date), \"count\": count} for date, count in result.all()\n        ]\n        return timeline\n\n    except Exception as e:\n        logger.error(f\"Error getting timeline: {e}\")\n        return [{\"error\": str(e)}]\n\n\n@router.get(\"/applications/status-breakdown\")\nasync def get_status_breakdown(\n    db: AsyncSession = Depends(get_db),\n) -> dict:\n    \"\"\"\n    Get detailed breakdown of application statuses\n    \"\"\"\n    try:\n        result = await db.execute(\n            select(Application.status, func.count(Application.id))\n            .group_by(Application.status)\n        )\n\n        breakdown = dict(result.all())\n        return {\n            \"status_breakdown\": breakdown,\n            \"total\": sum(breakdown.values()),\n            \"timestamp\": datetime.utcnow().isoformat(),\n        }\n\n    except Exception as e:\n        logger.error(f\"Error getting status breakdown: {e}\")\n        return {\"error\": str(e)}\n\n\n@router.get(\"/health\")\nasync def dashboard_health() -> dict:\n    \"\"\"\n    Health check for dashboard service\n    \"\"\"\n    return {\n        \"status\": \"ok\",\n        \"service\": \"dashboard\",\n        \"timestamp\": datetime.utcnow().isoformat(),\n    }\n"
+"""Dashboard API endpoints for metrics and analytics"""
+
+from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from datetime import datetime, timedelta
+import logging
+from ..database import get_db
+from ..models import Job, Application, ApplicationMetric
+from ..schemas import (
+    DashboardMetricsOut,
+    HighScoreJobsOut,
+    JobByScoreOut,
+    HealthCheckOut,
+    ApplicationTimelineResponse,
+    ApplicationTimelineOut,
+    StatusBreakdownResponse,
+    StatusBreakdownOut,
+    ScoringStats,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+
+@router.get("/metrics", response_model=DashboardMetricsOut)
+async def get_metrics(
+    days: int = Query(7, ge=1, le=90, description="Number of days to include"),
+    db: AsyncSession = Depends(get_db),
+) -> DashboardMetricsOut:
+    """
+    Get comprehensive dashboard metrics for the specified time period.
+
+    Args:
+        days: Number of days to look back (1-90)
+        db: Database session
+
+    Returns:
+        DashboardMetricsOut with complete metrics
+
+    Raises:
+        HTTPException: On database errors
+    """
+    try:
+        start_date = datetime.utcnow() - timedelta(days=days)
+
+        # Total jobs and applications
+        jobs_result = await db.execute(
+            select(func.count(Job.id)).where(Job.created_at >= start_date)
+        )
+        total_jobs = jobs_result.scalar() or 0
+
+        apps_result = await db.execute(
+            select(func.count(Application.id)).where(Application.created_at >= start_date)
+        )
+        total_apps = apps_result.scalar() or 0
+
+        # Success/failure counts
+        success_result = await db.execute(
+            select(func.count(ApplicationMetric.id)).where(
+                (ApplicationMetric.created_at >= start_date)
+                & (ApplicationMetric.status == "success")
+            )
+        )
+        successful = success_result.scalar() or 0
+
+        failed_result = await db.execute(
+            select(func.count(ApplicationMetric.id)).where(
+                (ApplicationMetric.created_at >= start_date)
+                & (ApplicationMetric.status == "failed")
+            )
+        )
+        failed = failed_result.scalar() or 0
+
+        success_rate = successful / (successful + failed) if (successful + failed) > 0 else 0.0
+
+        # Average score
+        score_result = await db.execute(
+            select(func.avg(Job.score)).where(
+                (Job.created_at >= start_date) & (Job.score.isnot(None))
+            )
+        )
+        avg_score = float(score_result.scalar() or 0)
+
+        # Score distribution
+        high_score_result = await db.execute(
+            select(func.count(Job.id)).where(
+                (Job.created_at >= start_date) & (Job.score >= 8)
+            )
+        )
+        high_scores = high_score_result.scalar() or 0
+
+        medium_score_result = await db.execute(
+            select(func.count(Job.id)).where(
+                (Job.created_at >= start_date)
+                & (Job.score >= 5)
+                & (Job.score < 8)
+            )
+        )
+        medium_scores = medium_score_result.scalar() or 0
+
+        low_score_result = await db.execute(
+            select(func.count(Job.id)).where(
+                (Job.created_at >= start_date) & (Job.score < 5)
+            )
+        )
+        low_scores = low_score_result.scalar() or 0
+
+        # Scoring stats
+        total_scored_result = await db.execute(
+            select(func.count(Job.id)).where(
+                (Job.created_at >= start_date) & (Job.score.isnot(None))
+            )
+        )
+        total_scored = total_scored_result.scalar() or 0
+        percentage_scored = (total_scored / total_jobs * 100) if total_jobs > 0 else 0.0
+
+        # By ATS platform
+        ats_result = await db.execute(
+            select(Application.ats_platform, func.count(Application.id))
+            .where(Application.created_at >= start_date)
+            .group_by(Application.ats_platform)
+        )
+        ats_data = {k: v for k, v in ats_result.all()}
+
+        # By job source
+        source_result = await db.execute(
+            select(Job.source, func.count(Job.id))
+            .where(Job.created_at >= start_date)
+            .group_by(Job.source)
+        )
+        source_data = {k: v for k, v in source_result.all()}
+
+        # By application status
+        status_result = await db.execute(
+            select(Application.status, func.count(Application.id))
+            .where(Application.created_at >= start_date)
+            .group_by(Application.status)
+        )
+        status_data = {k: v for k, v in status_result.all()}
+
+        scoring_stats = ScoringStats(
+            total_jobs=total_jobs,
+            total_scored=total_scored,
+            percentage_scored=round(percentage_scored, 2),
+            avg_score=round(avg_score, 2) if avg_score > 0 else None,
+            min_score=1,
+            max_score=10,
+            score_distribution={
+                "high (8-10)": high_scores,
+                "medium (5-7)": medium_scores,
+                "low (1-4)": low_scores,
+            },
+        )
+
+        return DashboardMetricsOut(
+            period_days=days,
+            timestamp=datetime.utcnow(),
+            total_jobs_discovered=total_jobs,
+            jobs_by_source=source_data,
+            total_applications=total_apps,
+            applications_by_status=status_data,
+            applications_by_ats=ats_data,
+            scoring_stats=scoring_stats,
+            successful_applications=successful,
+            failed_applications=failed,
+            success_rate=round(success_rate, 4),
+            avg_time_to_apply_minutes=None,
+        )
+
+    except Exception as e:
+        logger.error("Error getting dashboard metrics", extra={"error": str(e), "days": days})
+        raise HTTPException(status_code=500, detail="Failed to retrieve dashboard metrics")
+
+
+@router.get("/jobs/by-score", response_model=HighScoreJobsOut)
+async def get_jobs_by_score(
+    min_score: int = Query(1, ge=1, le=10),
+    max_score: int = Query(10, ge=1, le=10),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> HighScoreJobsOut:
+    """
+    Get jobs filtered by score range with pagination.
+
+    Args:
+        min_score: Minimum score (1-10)
+        max_score: Maximum score (1-10)
+        skip: Number of results to skip
+        limit: Number of results to return (1-100)
+        db: Database session
+
+    Returns:
+        HighScoreJobsOut with matching jobs
+
+    Raises:
+        HTTPException: If min_score > max_score or database errors
+    """
+    if min_score > max_score:
+        raise HTTPException(
+            status_code=400, detail="min_score must be less than or equal to max_score"
+        )
+
+    try:
+        # Get total count
+        count_result = await db.execute(
+            select(func.count(Job.id)).where(
+                (Job.score >= min_score)
+                & (Job.score <= max_score)
+                & (Job.score.isnot(None))
+            )
+        )
+        total_count = count_result.scalar() or 0
+
+        # Get paginated results
+        result = await db.execute(
+            select(Job)
+            .where(
+                (Job.score >= min_score)
+                & (Job.score <= max_score)
+                & (Job.score.isnot(None))
+            )
+            .order_by(Job.score.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        jobs = result.scalars().all()
+
+        jobs_out = [
+            JobByScoreOut(
+                id=job.id,
+                title=job.title,
+                company=job.company,
+                location=job.location,
+                score=job.score,
+                score_reasoning=job.score_reasoning,
+                score_strengths=job.score_strengths or [],
+                score_concerns=job.score_concerns or [],
+                score_recommendation=job.score_recommendation,
+                apply_url=job.apply_url,
+                source=job.source,
+            )
+            for job in jobs
+        ]
+
+        return HighScoreJobsOut(
+            total_available=total_count,
+            jobs=jobs_out,
+            min_score_threshold=min_score,
+        )
+
+    except Exception as e:
+        logger.error(
+            "Error filtering jobs by score",
+            extra={"error": str(e), "min_score": min_score, "max_score": max_score},
+        )
+        raise HTTPException(status_code=500, detail="Failed to filter jobs")
+
+
+@router.get("/applications/timeline", response_model=ApplicationTimelineResponse)
+async def get_applications_timeline(
+    days: int = Query(7, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+) -> ApplicationTimelineResponse:
+    """
+    Get applications over time for timeline visualization.
+
+    Args:
+        days: Number of days to look back
+        db: Database session
+
+    Returns:
+        ApplicationTimelineResponse with date/count data
+
+    Raises:
+        HTTPException: On database errors
+    """
+    try:
+        start_date = datetime.utcnow() - timedelta(days=days)
+
+        result = await db.execute(
+            select(
+                func.date(Application.created_at).label("date"),
+                func.count(Application.id).label("count"),
+            )
+            .where(Application.created_at >= start_date)
+            .group_by(func.date(Application.created_at))
+            .order_by(func.date(Application.created_at))
+        )
+
+        timeline = [
+            ApplicationTimelineOut(date=str(date), applications_count=count)
+            for date, count in result.all()
+        ]
+
+        return ApplicationTimelineResponse(period_days=days, data=timeline)
+
+    except Exception as e:
+        logger.error(
+            "Error getting application timeline", extra={"error": str(e), "days": days}
+        )
+        raise HTTPException(status_code=500, detail="Failed to retrieve timeline data")
+
+
+@router.get("/applications/status-breakdown", response_model=StatusBreakdownResponse)
+async def get_status_breakdown(
+    db: AsyncSession = Depends(get_db),
+) -> StatusBreakdownResponse:
+    """
+    Get application status distribution.
+
+    Args:
+        db: Database session
+
+    Returns:
+        StatusBreakdownResponse with status counts
+
+    Raises:
+        HTTPException: On database errors
+    """
+    try:
+        result = await db.execute(
+            select(Application.status, func.count(Application.id)).group_by(
+                Application.status
+            )
+        )
+
+        total = 0
+        breakdown_data = []
+        status_dict = dict(result.all())
+
+        for status, count in status_dict.items():
+            total += count
+
+        for status, count in sorted(status_dict.items()):
+            percentage = (count / total * 100) if total > 0 else 0.0
+            breakdown_data.append(
+                StatusBreakdownOut(status=status, count=count, percentage=round(percentage, 2))
+            )
+
+        return StatusBreakdownResponse(total_applications=total, breakdown=breakdown_data)
+
+    except Exception as e:
+        logger.error("Error getting status breakdown", extra={"error": str(e)})
+        raise HTTPException(status_code=500, detail="Failed to retrieve status breakdown")
+
+
+@router.get("/health", response_model=HealthCheckOut)
+async def dashboard_health() -> HealthCheckOut:
+    """
+    Health check for dashboard service.
+
+    Returns:
+        HealthCheckOut with service status
+    """
+    return HealthCheckOut(
+        status="ok",
+        service="dashboard",
+        db_initialized=True,
+        timestamp=datetime.utcnow(),
+    )

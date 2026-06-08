@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -53,6 +53,17 @@ class Job(Base):
     scored_at = Column(DateTime(timezone=True), nullable=True)  # When it was scored
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Performance indexes for Phase 4 dashboard queries
+    __table_args__ = (
+        Index('idx_score', score),  # Fast filtering by score range
+        Index('idx_scored_at', scored_at),  # Fast filtering by when scored
+        Index('idx_score_recommendation', score_recommendation),  # SUBMIT vs SKIP
+        Index('idx_created_at', created_at),  # Time-based queries
+        Index('idx_source', source),  # Filter by job source
+        Index('idx_status', status),  # Filter by application status
+        Index('idx_score_created', score, created_at),  # Combined for recent high-score jobs
+    )
 
     applications = relationship("Application", back_populates="job", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="job")

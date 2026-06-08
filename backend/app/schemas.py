@@ -156,3 +156,137 @@ class WSEvent(BaseModel):
     message: str
     screenshot_b64: Optional[str] = None
     timestamp: Optional[datetime] = None
+
+
+# ─── Phase 4: Dashboard & Scoring ────────────────────────────────────────────
+
+class ScoringStats(BaseModel):
+    """Job scoring statistics"""
+    total_jobs: int
+    total_scored: int
+    percentage_scored: float
+    avg_score: Optional[float] = None
+    min_score: Optional[int] = None
+    max_score: Optional[int] = None
+    score_distribution: dict  # {score: count, ...}
+
+
+class JobByScoreOut(BaseModel):
+    """Job with scoring details"""
+    id: int
+    title: str
+    company: str
+    location: Optional[str] = None
+    score: Optional[int] = None
+    score_reasoning: Optional[str] = None
+    score_strengths: Optional[List[str]] = None
+    score_concerns: Optional[List[str]] = None
+    score_recommendation: Optional[str] = None
+    apply_url: Optional[str] = None
+    source: str
+
+
+class HighScoreJobsOut(BaseModel):
+    """Response for high-scoring jobs filter"""
+    total_available: int
+    jobs: List[JobByScoreOut]
+    min_score_threshold: int
+
+
+class DashboardMetricsOut(BaseModel):
+    """Comprehensive dashboard metrics"""
+    period_days: int
+    timestamp: datetime
+    
+    # Job discovery metrics
+    total_jobs_discovered: int
+    jobs_by_source: dict
+    
+    # Application metrics
+    total_applications: int
+    applications_by_status: dict
+    applications_by_ats: dict
+    
+    # Scoring metrics
+    scoring_stats: ScoringStats
+    
+    # Performance metrics
+    successful_applications: int
+    failed_applications: int
+    success_rate: float
+    
+    # Timing metrics
+    avg_time_to_apply_minutes: Optional[float] = None
+
+
+class ScoringHealthOut(BaseModel):
+    """Scoring system health and status"""
+    total_jobs: int
+    scored_jobs: int
+    unscored_jobs: int
+    percentage_scored: float
+    score_distribution: dict
+    avg_score: Optional[float] = None
+    high_score_count: int  # score >= 8
+    low_score_count: int   # score <= 4
+    timestamp: datetime
+
+
+class ScoreJobsRequest(BaseModel):
+    """Request to score unscored jobs"""
+    min_date: Optional[datetime] = None
+    limit: int = 100
+    status: Optional[str] = None
+
+
+class ScoreJobsOut(BaseModel):
+    """Response from batch scoring operation"""
+    jobs_processed: int
+    jobs_newly_scored: int
+    jobs_skipped: int
+    errors: int
+    score_distribution: dict
+    avg_score: Optional[float] = None
+
+
+class HighScoreFilterRequest(BaseModel):
+    """Request to filter high-score jobs"""
+    min_score: int = 8
+    skip: int = 0
+    limit: int = 100
+
+
+class ApplicationTimelineOut(BaseModel):
+    """Time-series application data"""
+    date: str
+    applications_count: int
+    successful_count: Optional[int] = None
+    failed_count: Optional[int] = None
+
+
+class ApplicationTimelineResponse(BaseModel):
+    """Response with timeline data"""
+    period_days: int
+    data: List[ApplicationTimelineOut]
+
+
+class StatusBreakdownOut(BaseModel):
+    """Application status distribution"""
+    status: str
+    count: int
+    percentage: float
+
+
+class StatusBreakdownResponse(BaseModel):
+    """Response with status breakdown"""
+    total_applications: int
+    breakdown: List[StatusBreakdownOut]
+
+
+class HealthCheckOut(BaseModel):
+    """Health check response"""
+    status: str
+    service: str
+    db_initialized: bool
+    timestamp: datetime
+
