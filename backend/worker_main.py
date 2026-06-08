@@ -1,12 +1,12 @@
 """
-ECS Fargate Worker: Polls SQS for scraping tasks and executes them.
+ECS Fargate Worker: Polls SQS for job scraping and actor runs.
 
 This worker:
-1. Polls SQS for job scraping tasks
-2. Runs Playwright to scrape job boards
-3. Extracts job data and stores in database
-4. Uploads resumes to S3
-5. Marks tasks complete in SQS
+1. Polls SQS for two message types:
+   a) Job scraping tasks (legacy): Scrape job boards, extract with Cerebras, store as Job records
+   b) Actor runs (Phase 5): Execute registered actors (scrapers) with custom configs
+2. Handles lifecycle: processing, retries, error logging
+3. Marks tasks complete in SQS
 """
 
 import asyncio
@@ -43,6 +43,8 @@ from app.models import Job, Application
 from app.services.scraper_service import scrape_job_url
 from app.services.playwright_service import PlaywrightService
 from app.services.cerebras_service import extract_job
+from app.services.actor_framework import actor_registry
+from app.services.actor_runner import execute_actor_run
 
 
 async def process_scraping_task(task: dict, db: AsyncSession) -> bool:
@@ -117,17 +119,42 @@ async def process_scraping_task(task: dict, db: AsyncSession) -> bool:
         await pw_service.close() if 'pw_service' in locals() else None
 
 
+async def dispatch_message(message: dict, db: AsyncSession) -> bool:
+    """
+    Dispatch a message to the appropriate handler based on type.
+
+    Returns True if processed successfully, False otherwise.
+    """
+    # Determine message type
+    if "run_id" in message:
+        # Actor run message (Phase 5: Mini-Apify)
+        run_id = message.get("run_id")
+        logger.info(f"Dispatching to actor runner: run_id={run_id}")
+        return await execute_actor_run(db, run_id)
+    elif "job_url" in message:
+        # Job scraping message (legacy)
+        logger.info(f"Dispatching to job scraper")
+        return await process_scraping_task(message, db)
+    else:
+        logger.warning(f"Unknown message type: {message}")
+        return False
+
+
 async def poll_sqs_queue():
     """
-    Poll SQS queue for scraping tasks and process them.
+    Poll SQS queue for job scraping and actor run tasks.
 
     Runs continuously, processing one task at a time.
+    Supports:
+    - Job scraping: {job_url, source, company, title}
+    - Actor runs: {run_id, actor_name, input_config}
     """
     if not QUEUE_URL:
         logger.error("SQS_QUEUE_URL not set")
         return
 
     logger.info(f"Starting worker, polling {QUEUE_URL}")
+    logger.info(f"Available actors: {actor_registry.list()}")
     consecutive_empty_polls = 0
     max_empty_polls = 10  # Exit after 10 empty polls (5 minutes of inactivity)
 
@@ -162,10 +189,10 @@ async def poll_sqs_queue():
                         task = json.loads(message['Body'])
                         task_id = message['MessageId']
 
-                        logger.info(f"Received task {task_id}")
+                        logger.info(f"Received message {task_id}")
 
-                        # Process task
-                        success = await process_scraping_task(task, db)
+                        # Dispatch to appropriate handler
+                        success = await dispatch_message(task, db)
 
                         if success:
                             # Delete from queue
@@ -173,14 +200,14 @@ async def poll_sqs_queue():
                                 QueueUrl=QUEUE_URL,
                                 ReceiptHandle=message['ReceiptHandle']
                             )
-                            logger.info(f"Task {task_id} completed")
+                            logger.info(f"Message {task_id} completed successfully")
                         else:
                             # Leave in queue for retry
-                            logger.warning(f"Task {task_id} failed, will retry")
+                            logger.warning(f"Message {task_id} failed, will retry")
 
                     except json.JSONDecodeError as e:
                         logger.error(f"Invalid message JSON: {e}")
-                        # Delete invalid message
+                        # Delete invalid message to avoid infinite loops
                         sqs.delete_message(
                             QueueUrl=QUEUE_URL,
                             ReceiptHandle=message['ReceiptHandle']
