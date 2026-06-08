@@ -1,0 +1,72 @@
+{
+    "Version":  "2012-10-17",
+    "Statement":  [
+                      {
+                          "Effect":  "Allow",
+                          "Action":  [
+                                         "ecr:*"
+                                     ],
+                          "Resource":  "*"
+                      },
+                      {
+                          "Effect":  "Allow",
+                          "Action":  [
+                                         "ecs:*"
+                                     ],
+                          "Resource":  "*"
+                      },
+                      {
+                          "Effect":  "Allow",
+                          "Action":  [
+                                         "logs:CreateLogGroup",
+                                         "logs:CreateLogStream",
+                                         "logs:PutLogEvents",
+                                         "logs:DescribeLogGroups",
+                                         "logs:DescribeLogStreams",
+                                         "logs:GetLogEvents",
+                                         "logs:FilterLogEvents"
+                                     ],
+                          "Resource":  "*"
+                      },
+                      {
+                          "Effect":  "Allow",
+                          "Action":  [
+                                         "secretsmanager:GetSecretValue",
+                                         "secretsmanager:DescribeSecret",
+                                         "secretsmanager:ListSecrets"
+                                     ],
+                          "Resource":  "*"
+                      },
+                      {
+                          "Effect":  "Allow",
+                          "Action":  [
+                                         "ec2:DescribeSubnets",
+                                         "ec2:DescribeVpcs",
+                                         "ec2:DescribeSecurityGroups",
+                                         "ec2:DescribeNetworkInterfaces",
+                                         "ec2:CreateNetworkInterface",
+                                         "ec2:DeleteNetworkInterface"
+                                     ],
+                          "Resource":  "*"
+                      },
+                      {
+                          "Effect":  "Allow",
+                          "Action":  [
+                                         "application-autoscaling:*"
+                                     ],
+                          "Resource":  "*"
+                      },
+                      {
+                          "Effect":  "Allow",
+                          "Resource":  "*",
+                          "Action":  [
+                                         "secretsmanager:CreateSecret",
+                                         "secretsmanager:UpdateSecret",
+                                         "secretsmanager:PutSecretValue",
+                                         "secretsmanager:GetSecretValue",
+                                         "secretsmanager:DescribeSecret",
+                                         "secretsmanager:ListSecrets"
+                                     ]
+                      }
+                  ]
+}
