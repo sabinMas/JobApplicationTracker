@@ -1,12 +1,9 @@
-# Dockerfile for building Linux-compatible Python package
-FROM python:3.12-slim
+# Dockerfile for building Linux-compatible Python package for AWS Lambda Python 3.13
+FROM python:3.13-slim
 
 WORKDIR /build
 
-# Copy requirements
-COPY infra/requirements-lambda.txt .
-
-# Install build dependencies
+# Install build tools
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -14,24 +11,25 @@ RUN apt-get update && apt-get install -y \
     zip \
     && rm -rf /var/lib/apt/lists/*
 
-# Create package directory
-RUN mkdir -p /package
+WORKDIR /tmp/build
 
-# Install dependencies to package directory
-RUN pip install --target /package -r requirements-lambda.txt
+# Copy requirements
+COPY infra/requirements-lambda.txt .
+
+# Install dependencies into /var/task (Lambda's working directory)
+RUN pip install --target /var/task -r requirements-lambda.txt --no-cache-dir
 
 # Copy application code
-COPY backend/ /package/
+COPY backend/ /var/task/
 
-# Clean up
-WORKDIR /package
+# Create a clean deployment package
+WORKDIR /var/task
 RUN find . -name "__pycache__" -type d -exec rm -rf {} + \
     && find . -name "*.pyc" -delete \
     && rm -rf tests venv .git .github .vscode .pytest_cache
 
-# Create zip
-RUN cd /package && zip -r /build/lambda-deploy-linux-proper.zip .
+# Create zip file
+RUN zip -r /tmp/lambda-deploy-py313-fixed.zip . -x "*.pyc" "*.pyo" "__pycache__/*" ".*"
 
-# Make zip accessible
-VOLUME /output
-CMD ["cp", "/build/lambda-deploy-linux-proper.zip", "/output/"]
+# Copy zip file to output directory
+RUN mkdir -p /tmp/output && cp /tmp/lambda-deploy-py313-fixed.zip /tmp/output/

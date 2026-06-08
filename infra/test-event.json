@@ -1,1 +1,8 @@
-{"version": "2.0", "routeKey": "GET /health", "rawPath": "/health", "rawQueryString": "", "headers": {"content-type": "application/json"}, "requestContext": {"accountId": "245091941294", "apiId": "lambda-url", "domainName": "4elmr535rxhpo5ktgdaxrjejai0jyeie.lambda-url.us-east-1.on.aws", "domainPrefix": "4elmr535rxhpo5ktgdaxrjejai0jyeie", "http": {"method": "GET", "path": "/health", "protocol": "HTTP/1.1", "sourceIp": "127.0.0.1", "userAgent": "test"}}, "isBase64Encoded": false}
+{
+  "requestContext": {
+    "http": {
+      "method": "GET",
+      "path": "/health"
+    }
+  }
+}
