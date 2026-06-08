@@ -37,7 +37,7 @@
 
 ### 1. API Gateway Setup
 **Status**: Blocked by IAM permissions  
-**Required**: `AmazonAPIGatewayFullAccess` for `smm-app` user  
+**Required**: `AmazonAPIGatewayAdministrator` for `smm-app` user  
 **Script Ready**: `infra/setup-api-gateway-simple.ps1`  
 **Unblock Time**: ~5 minutes once permissions granted
 
@@ -169,14 +169,13 @@
 ### Prerequisites
 You need:
 1. AWS account with access to Lambda, RDS, API Gateway
-2. `smm-app` IAM user with admin-level permissions (or just `apigateway` + `lambda` permissions)
+2. `smm-app` IAM user with `AmazonAPIGatewayAdministrator` policy attached
 3. Cerebras API key (already set: `csk-rmt6v2ycf6df5cxjjtt4fnc6t55yprdkhvjry6hhypn98pm9`)
 
 ### Step 1: Grant AWS Permissions
 ```bash
 # Ask AWS admin to add to smm-app user:
-# - AmazonAPIGatewayFullAccess
-# - OR manually: apigateway:*, lambda:AddPermission
+# - AmazonAPIGatewayAdministrator (AWS managed policy)
 ```
 
 ### Step 2: Create API Gateway
