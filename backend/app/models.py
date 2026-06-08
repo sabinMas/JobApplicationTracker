@@ -142,6 +142,23 @@ class ApplicationMetric(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class Dataset(Base):
+    """Storage reference for results from a scraper run."""
+    __tablename__ = "datasets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Storage
+    s3_bucket = Column(String(200), nullable=False)  # jobtracker-documents-*
+    s3_key = Column(String(500), nullable=False)  # runs/linkedin/2026-06-08-12345/results.jsonl
+    item_count = Column(Integer, default=0)
+
+    # Schema info
+    item_schema = Column(JSON, nullable=True)  # Sample item structure
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class ScraperRun(Base):
     """Track an execution of a named actor with a config."""
     __tablename__ = "scraper_runs"
@@ -161,7 +178,11 @@ class ScraperRun(Base):
 
     # Results
     items_scraped = Column(Integer, default=0)
-    dataset_id = Column(Integer, ForeignKey("datasets.id"), nullable=True)
+    dataset_id = Column(
+        Integer,
+        ForeignKey("datasets.id", name="fk_scraper_run_dataset", ondelete="SET NULL"),
+        nullable=True
+    )
     error_message = Column(Text, nullable=True)
     log_entries = Column(JSON, default=list)  # [{timestamp, level, message}]
 
@@ -169,28 +190,7 @@ class ScraperRun(Base):
     webhook_url = Column(String(1000), nullable=True)  # POST when done
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    dataset = relationship("Dataset", back_populates="run", foreign_keys=[dataset_id])
     __table_args__ = (Index('idx_actor_status', actor_name, status),)
-
-
-class Dataset(Base):
-    """Storage reference for results from a scraper run."""
-    __tablename__ = "datasets"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    run_id = Column(Integer, ForeignKey("scraper_runs.id"), nullable=True)
-
-    # Storage
-    s3_bucket = Column(String(200), nullable=False)  # jobtracker-documents-*
-    s3_key = Column(String(500), nullable=False)  # runs/linkedin/2026-06-08-12345/results.jsonl
-    item_count = Column(Integer, default=0)
-
-    # Schema info
-    item_schema = Column(JSON, nullable=True)  # Sample item structure
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    run = relationship("ScraperRun", back_populates="dataset")
 
 
 class Actor(Base):
