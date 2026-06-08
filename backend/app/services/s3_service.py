@@ -36,12 +36,13 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 class S3DocumentService:
     """Handles document storage in S3."""
-    
+
     def __init__(self, bucket: Optional[str] = None, region: Optional[str] = None):
         self.bucket = bucket or S3_BUCKET
+        self.bucket_name = self.bucket  # Alias for clarity
         self.region = region or AWS_REGION
         self._client = None
-    
+
     @property
     def client(self):
         """Lazy-initialize S3 client."""
@@ -260,7 +261,7 @@ class S3DocumentService:
                     Prefix=prefix,
                 ),
             )
-            
+
             objects = response.get("Contents", [])
             return [
                 {
@@ -270,13 +271,60 @@ class S3DocumentService:
                 }
                 for obj in objects
             ]
-            
+
         except ClientError as e:
             logger.error(f"S3 list failed: {e}", extra_fields={
                 "prefix": prefix,
                 "error": str(e),
             })
             return []
+
+    async def write_jsonl(self, s3_key: str, items: list) -> str:
+        """
+        Write a list of items as JSONL (JSON Lines format) to S3.
+
+        Args:
+            s3_key: S3 object key (e.g., "runs/linkedin/2026-06-08-123/results.jsonl")
+            items: List of dict items to write
+
+        Returns:
+            The S3 key
+        """
+        import json
+
+        logger.info("Writing JSONL to S3", extra_fields={
+            "s3_key": s3_key,
+            "items_count": len(items),
+        })
+
+        try:
+            # Convert items to JSONL (newline-delimited JSON)
+            lines = "\n".join(json.dumps(item) for item in items)
+            content = lines.encode("utf-8")
+
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.client.put_object(
+                    Bucket=self.bucket,
+                    Key=s3_key,
+                    Body=content,
+                    ContentType="application/jsonl",
+                ),
+            )
+
+            logger.info("JSONL written to S3", extra_fields={
+                "s3_key": s3_key,
+                "size_bytes": len(content),
+            })
+            return s3_key
+
+        except ClientError as e:
+            logger.error(f"S3 write_jsonl failed: {e}", extra_fields={
+                "s3_key": s3_key,
+                "error": str(e),
+            })
+            raise
 
 
 # Global singleton instance

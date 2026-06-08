@@ -12,11 +12,10 @@ import httpx
 
 from app.models import ScraperRun, Dataset, Actor as ActorModel
 from app.services.actor_framework import actor_registry
-from app.services.s3_service import S3Service
+from app.services.s3_service import s3_service
 
 logger = logging.getLogger(__name__)
 
-s3 = S3Service()
 sqs = boto3.client("sqs", region_name="us-east-1")
 
 
@@ -102,12 +101,12 @@ async def execute_actor_run(
 
         # Store results to S3
         s3_key = f"runs/{run.actor_name}/{run_id}/results.jsonl"
-        await s3.write_jsonl(s3_key, items)
+        await s3_service.write_jsonl(s3_key, items)
 
         # Create dataset record
         dataset = Dataset(
             run_id=run_id,
-            s3_bucket=s3.bucket_name,
+            s3_bucket=s3_service.bucket_name,
             s3_key=s3_key,
             item_count=len(items),
             item_schema=items[0] if items else {},
