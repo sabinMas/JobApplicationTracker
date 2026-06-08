@@ -28,7 +28,14 @@ print("="*60 + "\n")
 async def setup_test_db():
     """Create fresh test database."""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # Drop with CASCADE to handle foreign key constraints
+        if "postgres" in str(engine.url) or "postgresql" in str(engine.url):
+            from sqlalchemy import text
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
+        else:
+            await conn.run_sync(Base.metadata.drop_all)
+
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Test database initialized")
 
