@@ -121,22 +121,90 @@ class ApplicationMetric(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
     attempt_number = Column(Integer, default=1)  # Retry count
-    
+
     # Timing
     start_time = Column(DateTime(timezone=True), server_default=func.now())
     end_time = Column(DateTime(timezone=True), nullable=True)
     duration_ms = Column(Integer, nullable=True)
-    
+
     # Status
     status = Column(String(50))  # success / failed / pending / submitted_unverified
     error_message = Column(Text, nullable=True)
     ats_platform_detected = Column(String(50))
-    
+
     # AI metrics
     form_fields_detected = Column(Integer, nullable=True)
     fields_filled = Column(Integer, nullable=True)
-    
+
     # Debug
     log_entries = Column(JSON, default=list)  # [{timestamp, step, message}]
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ScraperRun(Base):
+    """Track an execution of a named actor with a config."""
+    __tablename__ = "scraper_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    actor_name = Column(String(100), nullable=False)  # "linkedin", "indeed", "greenhouse"
+    run_name = Column(String(200), nullable=True)  # User-friendly name
+    status = Column(String(50), default="pending")  # pending/running/success/failed/cancelled
+
+    # Configuration
+    input_config = Column(JSON, nullable=False)  # Actor-specific input (query, filters, etc.)
+
+    # Execution
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+
+    # Results
+    items_scraped = Column(Integer, default=0)
+    dataset_id = Column(Integer, ForeignKey("datasets.id"), nullable=True)
+    error_message = Column(Text, nullable=True)
+    log_entries = Column(JSON, default=list)  # [{timestamp, level, message}]
+
+    # Meta
+    webhook_url = Column(String(1000), nullable=True)  # POST when done
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    dataset = relationship("Dataset", back_populates="run", foreign_keys=[dataset_id])
+    __table_args__ = (Index('idx_actor_status', actor_name, status),)
+
+
+class Dataset(Base):
+    """Storage reference for results from a scraper run."""
+    __tablename__ = "datasets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey("scraper_runs.id"), nullable=True)
+
+    # Storage
+    s3_bucket = Column(String(200), nullable=False)  # jobtracker-documents-*
+    s3_key = Column(String(500), nullable=False)  # runs/linkedin/2026-06-08-12345/results.jsonl
+    item_count = Column(Integer, default=0)
+
+    # Schema info
+    item_schema = Column(JSON, nullable=True)  # Sample item structure
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    run = relationship("ScraperRun", back_populates="dataset")
+
+
+class Actor(Base):
+    """Registry of available actors (scrapers)."""
+    __tablename__ = "actors"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False)  # "linkedin", "indeed"
+    display_name = Column(String(200))  # "LinkedIn Job Scraper"
+    description = Column(Text)
+    module_path = Column(String(500), nullable=False)  # "app.scrapers.linkedin"
+    input_schema = Column(JSON)  # JSON schema of input_config
+    output_schema = Column(JSON)  # JSON schema of scraped items
+    is_enabled = Column(Integer, default=1)  # Boolean flag
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

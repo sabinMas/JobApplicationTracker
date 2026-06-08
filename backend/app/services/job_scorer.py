@@ -1,4 +1,242 @@
 """
 Job Scoring Service - Uses Cerebras AI to score job relevance
 
-Scores jobs 1-10 based on:\n- Skill match\n- Salary alignment\n- Company reputation\n- Growth potential\n- Location preference\n\"\"\"\n\nimport json\nimport logging\nfrom typing import Optional, Dict, Any\nimport httpx\nimport os\nfrom datetime import datetime\n\nlogger = logging.getLogger(__name__)\n\n\nclass JobScorer:\n    \"\"\"Score jobs by relevance using Cerebras AI\"\"\"\n\n    def __init__(self):\n        self.api_key = os.getenv(\"CEREBRAS_API_KEY\")\n        self.base_url = \"https://api.cerebras.ai/v1\"\n        self.model = \"llama-3.1-70b\"\n        self.client = None\n\n    async def score_job(\n        self,\n        job_title: str,\n        company: str,\n        description: str,\n        salary_min: Optional[float] = None,\n        salary_max: Optional[float] = None,\n        location: Optional[str] = None,\n        user_profile: Optional[Dict[str, Any]] = None,\n    ) -> Dict[str, Any]:\n        \"\"\"\n        Score a single job for relevance\n\n        Returns:\n            {\n                \"score\": 8.5,  # 1-10 scale\n                \"reasoning\": \"Great salary match, strong skill alignment...\",\n                \"strengths\": [\"high salary\", \"remote\", \"skill match\"],\n                \"concerns\": [\"small company\"],\n                \"recommendation\": \"SUBMIT\"  # or SKIP\n            }\n        \"\"\"\n        try:\n            prompt = self._build_scoring_prompt(\n                job_title,\n                company,\n                description,\n                salary_min,\n                salary_max,\n                location,\n                user_profile,\n            )\n\n            # Call Cerebras API\n            async with httpx.AsyncClient() as client:\n                response = await client.post(\n                    f\"{self.base_url}/chat/completions\",\n                    headers={\n                        \"Authorization\": f\"Bearer {self.api_key}\",\n                        \"Content-Type\": \"application/json\",\n                    },\n                    json={\n                        \"model\": self.model,\n                        \"messages\": [{\"role\": \"user\", \"content\": prompt}],\n                        \"temperature\": 0.3,  # More deterministic\n                        \"max_tokens\": 500,\n                    },\n                    timeout=30.0,\n                )\n\n            if response.status_code != 200:\n                logger.error(f\"Cerebras API error: {response.status_code}\")\n                return self._default_score(\"API Error\")\n\n            result = response.json()\n            content = result[\"choices\"][0][\"message\"][\"content\"]\n\n            # Parse response\n            return self._parse_scoring_response(content)\n\n        except httpx.TimeoutException:\n            logger.warning(f\"Timeout scoring job: {job_title}\")\n            return self._default_score(\"Timeout\")\n        except Exception as e:\n            logger.error(f\"Error scoring job {job_title}: {e}\")\n            return self._default_score(str(e))\n\n    def _build_scoring_prompt(self, job_title, company, description, salary_min, salary_max, location, user_profile):\n        \"\"\"\n        Build the prompt for Cerebras to score the job\n\n        Scoring criteria:\n        - 8-10: Excellent match (high salary, strong skills, great company)\n        - 6-7: Good match (some concerns but overall positive)\n        - 4-5: Moderate match (significant tradeoffs)\n        - 1-3: Poor match (major concerns, likely waste of time)\n        \"\"\"\n\n        salary_info = \"\"\n        if salary_min and salary_max:\n            salary_info = f\"Salary range: ${salary_min:,} - ${salary_max:,}\"\n        elif salary_min:\n            salary_info = f\"Minimum salary: ${salary_min:,}\"\n\n        location_info = f\"Location: {location}\" if location else \"Location: Remote preferred\"\n\n        user_info = \"\"\n        if user_profile:\n            user_info = f\"\"\"\nUser Profile:\n- Target salary: ${user_profile.get('target_salary', 150000):,}\n- Preferred locations: {', '.join(user_profile.get('preferred_locations', ['Remote']))}\n- Skills: {', '.join(user_profile.get('skills', [])[:10])}\n- Experience level: {user_profile.get('experience_level', 'Mid-level')}\n            \"\"\"\n\n        prompt = f\"\"\"\nScore this job on a scale of 1-10 based on how well it matches for a software engineer.\n\nJob Details:\nTitle: {job_title}\nCompany: {company}\nDescription: {description[:1000]}...\n{salary_info}\n{location_info}\n\n{user_info}\n\nScoring Criteria:\n- 8-10: Excellent match (strong salary, skill alignment, growth potential)\n- 6-7: Good match (most factors positive)\n- 4-5: Moderate match (some concerns)\n- 1-3: Poor match (major red flags)\n\nProvide your response in this exact JSON format:\n{{\n    \"score\": <number 1-10>,\n    \"reasoning\": \"<2-3 sentence explanation>\",\n    \"strengths\": [\"<strength 1>\", \"<strength 2>\"],\n    \"concerns\": [\"<concern if any>\"],\n    \"recommendation\": \"<SUBMIT or SKIP>\"\n}}\n\nRespond ONLY with the JSON, no other text.\n\"\"\"\n\n        return prompt\n\n    def _parse_scoring_response(self, content: str) -> Dict[str, Any]:\n        \"\"\"\n        Parse Cerebras response and extract score\n        \"\"\"\n        try:\n            # Extract JSON from response\n            content = content.strip()\n            if content.startswith(\"```\"):\n                content = content.split(\"```\")[1]\n                if content.startswith(\"json\"):\n                    content = content[4:]\n\n            data = json.loads(content)\n\n            # Validate required fields\n            score = float(data.get(\"score\", 5))\n            score = max(1, min(10, score))  # Clamp 1-10\n\n            return {\n                \"score\": score,\n                \"reasoning\": data.get(\"reasoning\", \"N/A\"),\n                \"strengths\": data.get(\"strengths\", []),\n                \"concerns\": data.get(\"concerns\", []),\n                \"recommendation\": data.get(\"recommendation\", \"SKIP\"),\n                \"parsed_at\": datetime.utcnow().isoformat(),\n            }\n\n        except json.JSONDecodeError:\n            logger.warning(f\"Failed to parse JSON response: {content[:100]}\")\n            return self._default_score(\"Parse Error\")\n        except Exception as e:\n            logger.error(f\"Error parsing score response: {e}\")\n            return self._default_score(str(e))\n\n    def _default_score(self, reason: str) -> Dict[str, Any]:\n        \"\"\"\n        Return default score when API fails\n        Default to 5 (medium) to avoid missing jobs\n        \"\"\"\n        return {\n            \"score\": 5.0,\n            \"reasoning\": f\"Could not score job: {reason}. Defaulting to 5.\",\n            \"strengths\": [],\n            \"concerns\": [reason],\n            \"recommendation\": \"SKIP\",  # Skip on error (conservative approach)\n            \"is_default\": True,\n        }\n\n    async def score_multiple_jobs(\n        self, jobs: list, user_profile: Optional[Dict[str, Any]] = None\n    ) -> list:\n        \"\"\"\n        Score multiple jobs (batch processing)\n        \"\"\"\n        scored_jobs = []\n        for job in jobs:\n            try:\n                score_result = await self.score_job(\n                    job_title=job.get(\"title\"),\n                    company=job.get(\"company\"),\n                    description=job.get(\"description\", \"\"),\n                    salary_min=job.get(\"salary_min\"),\n                    salary_max=job.get(\"salary_max\"),\n                    location=job.get(\"location\"),\n                    user_profile=user_profile,\n                )\n                scored_jobs.append({**job, **score_result})\n            except Exception as e:\n                logger.error(f\"Error scoring job {job.get('title')}: {e}\")\n                scored_jobs.append({**job, **self._default_score(str(e))})\n\n        return scored_jobs\n\n\n# Singleton instance\n_scorer = None\n\n\nasync def get_scorer() -> JobScorer:\n    \"\"\"Get or create scorer instance\"\"\"\n    global _scorer\n    if _scorer is None:\n        _scorer = JobScorer()\n    return _scorer\n"
+Scores jobs 1-10 based on:
+- Skill match
+- Salary alignment
+- Company reputation
+- Growth potential
+- Location preference
+"""
+
+import json
+import logging
+from typing import Optional, Dict, Any
+import httpx
+import os
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+
+class JobScorer:
+    """Score jobs by relevance using Cerebras AI"""
+
+    def __init__(self):
+        self.api_key = os.getenv("CEREBRAS_API_KEY")
+        self.base_url = "https://api.cerebras.ai/v1"
+        self.model = "llama-3.1-70b"
+        self.client = None
+
+    async def score_job(
+        self,
+        job_title: str,
+        company: str,
+        description: str,
+        salary_min: Optional[float] = None,
+        salary_max: Optional[float] = None,
+        location: Optional[str] = None,
+        user_profile: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Score a single job for relevance
+
+        Returns:
+            {
+                "score": 8.5,  # 1-10 scale
+                "reasoning": "Great salary match, strong skill alignment...",
+                "strengths": ["high salary", "remote", "skill match"],
+                "concerns": ["small company"],
+                "recommendation": "SUBMIT"  # or SKIP
+            }
+        """
+        try:
+            prompt = self._build_scoring_prompt(
+                job_title,
+                company,
+                description,
+                salary_min,
+                salary_max,
+                location,
+                user_profile,
+            )
+
+            # Call Cerebras API
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.3,  # More deterministic
+                        "max_tokens": 500,
+                    },
+                    timeout=30.0,
+                )
+
+            if response.status_code != 200:
+                logger.error(f"Cerebras API error: {response.status_code}")
+                return self._default_score("API Error")
+
+            result = response.json()
+            content = result["choices"][0]["message"]["content"]
+
+            # Parse response
+            return self._parse_scoring_response(content)
+
+        except httpx.TimeoutException:
+            logger.warning(f"Timeout scoring job: {job_title}")
+            return self._default_score("Timeout")
+        except Exception as e:
+            logger.error(f"Error scoring job {job_title}: {e}")
+            return self._default_score(str(e))
+
+    def _build_scoring_prompt(self, job_title, company, description, salary_min, salary_max, location, user_profile):
+        """
+        Build the prompt for Cerebras to score the job
+
+        Scoring criteria:
+        - 8-10: Excellent match (high salary, strong skills, great company)
+        - 6-7: Good match (some concerns but overall positive)
+        - 4-5: Moderate match (significant tradeoffs)
+        - 1-3: Poor match (major concerns, likely waste of time)
+        """
+
+        salary_info = ""
+        if salary_min and salary_max:
+            salary_info = f"Salary range: ${salary_min:,} - ${salary_max:,}"
+        elif salary_min:
+            salary_info = f"Minimum salary: ${salary_min:,}"
+
+        location_info = f"Location: {location}" if location else "Location: Remote preferred"
+
+        user_info = ""
+        if user_profile:
+            user_info = f"""
+User Profile:
+- Target salary: ${user_profile.get('target_salary', 150000):,}
+- Preferred locations: {', '.join(user_profile.get('preferred_locations', ['Remote']))}
+- Skills: {', '.join(user_profile.get('skills', [])[:10])}
+- Experience level: {user_profile.get('experience_level', 'Mid-level')}
+            """
+
+        prompt = f"""
+Score this job on a scale of 1-10 based on how well it matches for a software engineer.
+
+Job Details:
+Title: {job_title}
+Company: {company}
+Description: {description[:1000]}...
+{salary_info}
+{location_info}
+
+{user_info}
+
+Scoring Criteria:
+- 8-10: Excellent match (strong salary, skill alignment, growth potential)
+- 6-7: Good match (most factors positive)
+- 4-5: Moderate match (some concerns)
+- 1-3: Poor match (major red flags)
+
+Provide your response in this exact JSON format:
+{{
+    "score": <number 1-10>,
+    "reasoning": "<2-3 sentence explanation>",
+    "strengths": ["<strength 1>", "<strength 2>"],
+    "concerns": ["<concern if any>"],
+    "recommendation": "<SUBMIT or SKIP>"
+}}
+
+Respond ONLY with the JSON, no other text.
+"""
+
+        return prompt
+
+    def _parse_scoring_response(self, content: str) -> Dict[str, Any]:
+        """
+        Parse Cerebras response and extract score
+        """
+        try:
+            # Extract JSON from response
+            content = content.strip()
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+
+            data = json.loads(content)
+
+            # Validate required fields
+            score = float(data.get("score", 5))
+            score = max(1, min(10, score))  # Clamp 1-10
+
+            return {
+                "score": score,
+                "reasoning": data.get("reasoning", "N/A"),
+                "strengths": data.get("strengths", []),
+                "concerns": data.get("concerns", []),
+                "recommendation": data.get("recommendation", "SKIP"),
+                "parsed_at": datetime.utcnow().isoformat(),
+            }
+
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse JSON response: {content[:100]}")
+            return self._default_score("Parse Error")
+        except Exception as e:
+            logger.error(f"Error parsing score response: {e}")
+            return self._default_score(str(e))
+
+    def _default_score(self, reason: str) -> Dict[str, Any]:
+        """
+        Return default score when API fails
+        Default to 5 (medium) to avoid missing jobs
+        """
+        return {
+            "score": 5.0,
+            "reasoning": f"Could not score job: {reason}. Defaulting to 5.",
+            "strengths": [],
+            "concerns": [reason],
+            "recommendation": "SKIP",  # Skip on error (conservative approach)
+            "is_default": True,
+        }
+
+    async def score_multiple_jobs(
+        self, jobs: list, user_profile: Optional[Dict[str, Any]] = None
+    ) -> list:
+        """
+        Score multiple jobs (batch processing)
+        """
+        scored_jobs = []
+        for job in jobs:
+            try:
+                score_result = await self.score_job(
+                    job_title=job.get("title"),
+                    company=job.get("company"),
+                    description=job.get("description", ""),
+                    salary_min=job.get("salary_min"),
+                    salary_max=job.get("salary_max"),
+                    location=job.get("location"),
+                    user_profile=user_profile,
+                )
+                scored_jobs.append({**job, **score_result})
+            except Exception as e:
+                logger.error(f"Error scoring job {job.get('title')}: {e}")
+                scored_jobs.append({**job, **self._default_score(str(e))})
+
+        return scored_jobs
+
+
+# Singleton instance
+_scorer = None
+
+
+async def get_scorer() -> JobScorer:
+    """Get or create scorer instance"""
+    global _scorer
+    if _scorer is None:
+        _scorer = JobScorer()
+    return _scorer

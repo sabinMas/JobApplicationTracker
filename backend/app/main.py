@@ -6,9 +6,11 @@ import os
 
 from .logging_config import setup_logging, get_logger
 from .database import init_db
-from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics, dashboard, auto_apply_scored
+from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics, dashboard, auto_apply_scored, scraper
 from .services.job_sources import JobSourceManager, RSSJobSource
 from .services.job_sync_scheduler import JobSyncScheduler, set_scheduler
+from .services.actor_framework import actor_registry
+from .scrapers.linkedin_actor import LinkedInActor
 
 # Initialize structured logging
 setup_logging(os.getenv("ENVIRONMENT", "development"))
@@ -18,10 +20,20 @@ logger = get_logger(__name__)
 _db_initialized = False
 _job_sync_scheduler = None
 
+def _init_actors():
+    """Register all available actors."""
+    try:
+        actor_registry.register(LinkedInActor())
+        logger.info("Actors initialized successfully")
+    except Exception as e:
+        logger.error(f"Actor init error: {e}", extra_fields={"error": str(e)})
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize DB and scheduler in background without blocking startup
+    # Initialize DB, scheduler, and actors in background without blocking startup
     global _db_initialized, _job_sync_scheduler
+    _init_actors()
     asyncio.create_task(_init_db_background())
     asyncio.create_task(_init_scheduler_background())
     yield
@@ -94,6 +106,7 @@ app.include_router(scheduler.router)
 app.include_router(metrics.router)
 app.include_router(dashboard.router)  # Phase 4: Dashboard API
 app.include_router(auto_apply_scored.router)  # Phase 4: Scoring integration
+app.include_router(scraper.router)  # Actor-based scraper framework
 
 # WebSocket route is registered inside automation router as /api/automation/ws/{session_id}
 
