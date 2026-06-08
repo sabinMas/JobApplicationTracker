@@ -281,13 +281,80 @@ def get_session_status(session_id: str) -> Optional[dict]:
 
 
 class PlaywrightService:
-    """Wrapper class for Playwright browser automation."""
-    
+    """Wrapper for simple Playwright page fetching for scrapers."""
+
+    def __init__(self):
+        """Initialize browser components as None - lazy loaded on first use."""
+        self._playwright = None
+        self._browser = None
+        self._context = None
+        self._logger = None
+
+    async def _init_browser(self):
+        """Initialize browser on first use (lazy loading)."""
+        if self._browser is not None:
+            return
+
+        try:
+            self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"],
+            )
+            self._context = await self._browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to initialize Playwright browser: {e}")
+            raise
+
     async def fetch_page(self, url: str, timeout: int = 30000) -> Optional[str]:
-        """Fetch a page's HTML content."""
-        # For now, return empty to prevent crashes - real implementation would use playwright
-        return None
-    
+        """
+        Fetch a page and return its HTML content.
+
+        Args:
+            url: The URL to fetch
+            timeout: Request timeout in milliseconds
+
+        Returns:
+            HTML content as string, or None if fetch failed
+        """
+        try:
+            await self._init_browser()
+
+            page = await self._context.new_page()
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+                html = await page.content()
+                return html
+            finally:
+                await page.close()
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to fetch {url}: {e}")
+            return None
+
     async def close(self):
-        """Close browser session."""
-        pass
+        """Clean up browser and Playwright resources."""
+        try:
+            if self._context:
+                await self._context.close()
+                self._context = None
+            if self._browser:
+                await self._browser.close()
+                self._browser = None
+            if self._playwright:
+                await self._playwright.stop()
+                self._playwright = None
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error closing Playwright: {e}")

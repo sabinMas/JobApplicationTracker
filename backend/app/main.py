@@ -11,7 +11,7 @@ from .services.job_sources import JobSourceManager, RSSJobSource
 from .services.job_sync_scheduler import JobSyncScheduler, set_scheduler
 from .services.actor_framework import actor_registry
 from .scrapers.test_actor import TestActor
-# from .scrapers.linkedin_actor import LinkedInActor  # TODO: Fix PlaywrightService import
+from .scrapers.linkedin_actor import LinkedInActor
 
 # Initialize structured logging
 setup_logging(os.getenv("ENVIRONMENT", "development"))
@@ -25,7 +25,7 @@ def _init_actors():
     """Register all available actors."""
     try:
         actor_registry.register(TestActor())
-        # actor_registry.register(LinkedInActor())  # TODO: Fix PlaywrightService import
+        actor_registry.register(LinkedInActor())
         logger.info("Actors initialized successfully")
     except Exception as e:
         logger.error(f"Actor init error: {e}", extra_fields={"error": str(e)})
