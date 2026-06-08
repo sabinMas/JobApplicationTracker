@@ -1,5 +1,6 @@
 """LinkedIn job scraper actor."""
 
+import asyncio
 import logging
 from typing import Any, Dict, List
 from app.services.actor_framework import Actor
@@ -58,6 +59,9 @@ class LinkedInActor(Actor):
 
                 for job_url in job_urls:
                     try:
+                        # Rate limiting to prevent IP bans
+                        await asyncio.sleep(0.5)
+
                         job_html = await pw.fetch_page(job_url, timeout=20000)
                         if job_html:
                             job_data = await extract_job(job_html)

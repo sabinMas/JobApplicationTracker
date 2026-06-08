@@ -1,8 +1,7 @@
-"""Indeed job scraper actor."""
+"""GitHub Jobs scraper actor."""
 
 import asyncio
 import logging
-import re
 from typing import Any, Dict, List
 from app.services.actor_framework import Actor
 from app.services.playwright_service import PlaywrightService
@@ -11,25 +10,24 @@ from app.services.cerebras_service import extract_job
 logger = logging.getLogger(__name__)
 
 
-class IndeedActor(Actor):
-    """Scrapes Indeed jobs for a given query."""
+class GitHubActor(Actor):
+    """Scrapes GitHub Jobs listings."""
 
-    name = "indeed"
+    name = "github"
 
     async def run(self, config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Scrape Indeed jobs.
+        Scrape GitHub Jobs.
 
         Config:
         {
             "query": "python developer",
-            "location": "united states",
-            "max_results": 50,
-            "experience_level": "entry"
+            "location": "san francisco",
+            "max_results": 25
         }
         """
         query = config.get("query", "").replace(" ", "+")
-        location = config.get("location", "united states").replace(" ", "+")
+        location = config.get("location", "").replace(" ", "+")
         max_results = config.get("max_results", 25)
 
         if not query:
@@ -39,40 +37,40 @@ class IndeedActor(Actor):
         pw = PlaywrightService()
 
         try:
-            # Indeed search URL
-            base_url = (
-                f"https://www.indeed.com/jobs"
-                f"?q={query}"
-                f"&l={location}"
-            )
+            # GitHub Jobs search URL
+            url = f"https://jobs.github.com/positions?description={query}"
+            if location:
+                url += f"&location={location}"
 
-            logger.info(f"Scraping Indeed: {base_url}")
+            logger.info(f"Scraping GitHub Jobs: {url}")
 
-            html = await pw.fetch_page(base_url, timeout=30000)
+            html = await pw.fetch_page(url, timeout=30000)
             if not html:
-                logger.warning("Failed to fetch Indeed search page")
+                logger.warning("Failed to fetch GitHub Jobs page")
                 return items
 
-            # Extract job listing URLs
-            job_urls = re.findall(
-                r'https://www\.indeed\.com/rc/clk\?.*?jk=([a-f0-9]+)',
+            # Extract job listings from the page
+            # GitHub Jobs shows job IDs as links in the page
+            import re
+            job_links = re.findall(
+                r'href="(/positions/([a-f0-9\-]+))"',
                 html
             )[:5]  # Limit to first 5
 
-            logger.info(f"Found {len(job_urls)} job links on Indeed")
+            logger.info(f"Found {len(job_links)} job links on GitHub Jobs")
 
-            for job_id in job_urls:
+            for job_path, job_id in job_links:
                 try:
-                    # Rate limiting to prevent IP bans
+                    # Rate limiting
                     await asyncio.sleep(0.5)
 
-                    job_url = f"https://www.indeed.com/viewjob?jk={job_id}"
+                    job_url = f"https://jobs.github.com{job_path}"
                     job_html = await pw.fetch_page(job_url, timeout=20000)
 
                     if job_html:
                         job_data = await extract_job(job_html)
                         if job_data and job_data.get("title"):
-                            job_data["source"] = "indeed"
+                            job_data["source"] = "github"
                             job_data["source_url"] = job_url
                             items.append(job_data)
                             logger.debug(f"Extracted: {job_data.get('title')}")
@@ -80,11 +78,11 @@ class IndeedActor(Actor):
                             if len(items) >= max_results:
                                 break
                 except Exception as e:
-                    logger.error(f"Error scraping Indeed job {job_id}: {e}")
+                    logger.error(f"Error scraping GitHub job {job_id}: {e}")
                     continue
 
         finally:
             await pw.close()
 
-        logger.info(f"Indeed actor scraped {len(items)} jobs")
+        logger.info(f"GitHub actor scraped {len(items)} jobs")
         return items
