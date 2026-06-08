@@ -362,14 +362,17 @@ pytest backend/ -v -k "test_apply"  # filter by name
 | Component | Status | Detail |
 |---|---|---|
 | Frontend (Vercel) | ✅ Live | Auto-deploys on push to master |
-| Lambda function | ✅ Active | `jobtracker-api`, Python 3.13, 512 MB |
-| PostgreSQL (RDS) | ✅ Ready | Scoring columns migration applied via `infra/add_scoring_to_jobs.sql` |
-| S3 bucket | ✅ Available | `jobtracker-documents-245091941294`, versioning on |
-| EventBridge scheduler | ✅ Enabled | Daily 8 AM EST |
-| Function URL / API Gateway | ⚠️ Blocked | 403 Forbidden — `smm-app` IAM user needs `AmazonAPIGatewayFullAccess`. See [docs/deployment/phase4-guide.md](docs/deployment/phase4-guide.md) |
-| Lambda binary deps | ⚠️ Fixed | `deploy-package-linux/` has the correct Linux-built `pydantic_core`. Use `lambda-deploy-linux-fixed.zip` |
+| ECS Fargate API | ✅ Active | FastAPI service in Fargate, 1 GB RAM, auto-scaling enabled |
+| ECS Fargate Worker | ✅ Active | SQS-based scraper worker, scales 1-5 tasks based on queue depth |
+| PostgreSQL (RDS) | ✅ Ready | Connected, scoring columns migration applied |
+| S3 bucket | ✅ Available | `jobtracker-documents-245091941294`, JSONL results storage enabled |
+| SQS Queue | ✅ Active | `jobtracker-scraper-queue`, dead-letter queue configured |
+| CloudWatch Logs | ✅ Logging | Structured JSON logging for all components |
+| Application Load Balancer | ⚠️ Optional | Script ready but requires `elasticloadbalancing:CreateLoadBalancer` IAM permission |
+| All 4 Actors | ✅ Active | Test, LinkedIn, Indeed, GitHub scrapers registered and functional |
+| Job Enrichment Pipeline | ✅ Active | Auto-triggers on jobs with score ≥ 7, source-based actor routing |
 
-**Immediate unblock path**: Grant API Gateway IAM permissions → run `infra/setup-api-gateway-simple.ps1` → set `VITE_API_URL` in Vercel → done.
+**Infrastructure ready for real-world testing** — all critical components operational on ECS with auto-scaling and monitoring.
 
 ---
 
@@ -380,9 +383,10 @@ pytest backend/ -v -k "test_apply"  # filter by name
 | 1 | Observability, retry logic, monitoring dashboard, intelligent routing | ✅ Complete |
 | 2 | AWS Lambda, RDS PostgreSQL, S3, EventBridge | ✅ Complete |
 | 3 | AgentCore scoring, Lever/Greenhouse API routing | ✅ Complete |
-| 4 | Dashboard API, scored auto-apply, binary fix for Lambda | ✅ Complete (unblocked pending IAM fix) |
-| 5 | Email tracking, interview notification parsing, follow-up automation | Planned |
-| 6 | ML niche job detection, user feedback scoring loop | Planned |
+| 4 | Dashboard API, scored auto-apply, binary fix for Lambda | ✅ Complete |
+| 5 | Mini-Apify actor framework, job enrichment pipeline, ECS deployment | ✅ Complete — 4 actors, SQS-based scaling, comprehensive testing guide in [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) |
+| 6 | Email tracking, interview notification parsing, follow-up automation | Planned |
+| 7 | ML niche job detection, user feedback scoring loop | Planned |
 
 ---
 
@@ -390,20 +394,31 @@ pytest backend/ -v -k "test_apply"  # filter by name
 
 | What | Where |
 |---|---|
+| **Core** | |
 | Environment variables | `backend/.env` (gitignored) |
-| Local SQLite database | `data/app.db` |
-| Uploaded resumes | `data/documents/resumes/` |
-| AI-generated documents | `data/generated/` |
 | ORM models | `backend/app/models.py` |
-| Cerebras AI calls | `backend/app/services/cerebras_service.py` |
+| **Actors & Scraping** | |
+| Actor framework | `backend/app/services/actor_framework.py` |
+| Test actor | `backend/app/scrapers/test_actor.py` |
+| LinkedIn scraper | `backend/app/scrapers/linkedin_actor.py` |
+| Indeed scraper | `backend/app/scrapers/indeed_actor.py` |
+| GitHub scraper | `backend/app/scrapers/github_actor.py` |
+| Job enrichment pipeline | `backend/app/services/job_enrichment.py` |
+| Playwright browser automation | `backend/app/services/playwright_service.py` |
+| **AI & Application** | |
+| Cerebras AI integration | `backend/app/services/cerebras_service.py` |
 | Form fill + submit logic | `backend/app/services/auto_submit.py` |
 | ATS detection | `backend/app/services/ats_integration.py` |
 | Job scoring | `backend/app/services/job_scorer.py` |
 | Retry logic | `backend/app/services/retry_service.py` |
+| **Infrastructure & DevOps** | |
+| Docker API container | `Dockerfile.api` |
+| Docker worker container | `Dockerfile.worker` |
+| ECS auto-scaling setup | `infra/setup-worker-autoscaling.ps1` |
+| Application Load Balancer setup | `infra/setup-alb.ps1` |
+| **Documentation** | |
+| Testing guide | `docs/TESTING_GUIDE.md` |
 | Structured logging setup | `backend/app/logging_config.py` |
-| Lambda deployment zip | `infra/lambda-deploy-linux-fixed.zip` |
-| DB scoring migration | `infra/add_scoring_to_jobs.sql` |
-| API Gateway setup script | `infra/setup-api-gateway-simple.ps1` |
 
 ---
 
