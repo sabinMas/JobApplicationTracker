@@ -1,18 +1,25 @@
 """
 PDF text extraction (pdfplumber) and PDF generation (reportlab).
 """
-import pdfplumber
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
+try:
+    import pdfplumber
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+
 import re
 from pathlib import Path
 
 
 def extract_text(pdf_path: str) -> str:
+    if not PDF_AVAILABLE:
+        raise RuntimeError("pdfplumber not installed. Install with: pip install pdfplumber")
     """Extract all text from a PDF file."""
     text_parts = []
     with pdfplumber.open(pdf_path) as pdf:

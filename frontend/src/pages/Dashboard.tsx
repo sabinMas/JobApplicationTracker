@@ -1,107 +1,132 @@
-import { Briefcase, Send, PhoneCall, Trophy, TrendingUp, Loader2 } from 'lucide-react'
-import { useJobs } from '../hooks/useJobs'
-import { useApplications } from '../hooks/useApplications'
-import { useProfile } from '../hooks/useProfile'
-import { KanbanBoard } from '../components/KanbanBoard'
-import { Link, Navigate } from 'react-router-dom'
+import React from 'react';
+import {
+  BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
+import { useQuery } from '@tanstack/react-query';
+import { dashboardAPI } from '../api/dashboard';
 
-function StatCard({ icon: Icon, label, value, color }: {
-  icon: React.ElementType
-  label: string
-  value: number
-  color: string
-}) {
-  return (
-    <div className="card p-4 flex items-center gap-4">
-      <div className={`p-3 rounded-xl ${color}`}>
-        <Icon size={20} className="text-white" />
-      </div>
-      <div>
-        <p className="text-2xl font-bold text-gray-800">{value}</p>
-        <p className="text-xs text-gray-600">{label}</p>
-      </div>
-    </div>
-  )
-}
+const Dashboard: React.FC = () => {
+  const { data: metrics, isLoading } = useQuery({
+    queryKey: ['dashboard-metrics'],
+    queryFn: () => dashboardAPI.getMetrics(7),
+  });
 
-export function Dashboard() {
-  const { data: profile, isLoading: profileLoading } = useProfile()
-  const { data: jobs = [], isLoading } = useJobs()
-  const { data: applications = [] } = useApplications()
-
-  // Redirect to onboarding if profile not set up
-  if (profileLoading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 size={32} className="text-brand-600 animate-spin" />
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-white">Loading dashboard...</p>
+        </div>
       </div>
-    )
+    );
   }
 
-  if (!profile?.full_name) {
-    return <Navigate to="/onboarding" replace />
+  if (!metrics) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-red-400">Failed to load dashboard data</p>
+      </div>
+    );
   }
 
-  const stats = {
-    total: jobs.length,
-    applied: applications.filter(a => a.status !== 'pending' && a.status !== 'withdrawn').length,
-    interviews: applications.filter(a => ['interview', 'phone_screen'].includes(a.status)).length,
-    offers: applications.filter(a => a.status === 'offer').length,
-  }
+  const sourceData = Object.entries(metrics.by_source || {}).map(([name, value]) => ({
+    name,
+    value,
+  }));
 
-  const responseRate = stats.applied > 0
-    ? Math.round((stats.interviews / stats.applied) * 100)
-    : 0
+  const atsPlatformData = Object.entries(metrics.by_ats_platform || {}).map(([name, value]) => ({
+    name,
+    value,
+  }));
+
+  const scoreDistributionData = [
+    { name: 'High (8-10)', value: metrics.score_distribution?.high || 0 },
+    { name: 'Medium (5-7)', value: metrics.score_distribution?.medium || 0 },
+    { name: 'Low (1-4)', value: metrics.score_distribution?.low || 0 },
+  ];
+
+  const COLORS = ['#22c55e', '#f59e0b', '#ef4444'];
 
   return (
-    <div className="flex flex-col gap-6 h-full">
-      {/* Stats bar */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={Briefcase}   label="Total Jobs Tracked" value={stats.total}     color="bg-brand-600" />
-        <StatCard icon={Send}        label="Applications Sent"  value={stats.applied}   color="bg-brand-500" />
-        <StatCard icon={PhoneCall}   label="Interviews"         value={stats.interviews} color="bg-brand-400" />
-        <StatCard icon={Trophy}      label="Offers"             value={stats.offers}    color="bg-emerald-600" />
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold text-white mb-2">Dashboard</h1>
+        <p className="text-gray-400 mb-8">Real-time job application tracking and metrics</p>
 
-      {/* Response rate banner */}
-      {stats.applied > 0 && (
-        <div className="card p-3 flex items-center gap-3 bg-emerald-50 border-emerald-200">
-          <TrendingUp size={18} className="text-emerald-700" />
-          <span className="text-sm text-gray-700">
-            Response rate: <strong className="text-emerald-700">{responseRate}%</strong>
-            <span className="text-gray-600 ml-2">({stats.interviews} interviews from {stats.applied} applications)</span>
-          </span>
-        </div>
-      )}
-
-      {/* Kanban */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-800">Application Pipeline</h2>
-        <Link to="/search" className="btn-primary text-sm py-1.5 px-3">
-          + Add Job
-        </Link>
-      </div>
-
-      {isLoading ? (
-        <div className="flex-1 flex items-center justify-center text-gray-500">
-          Loading jobs…
-        </div>
-      ) : jobs.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
-          <Briefcase size={48} className="text-parchment-300" />
-          <div>
-            <p className="text-gray-600 font-medium">No jobs tracked yet</p>
-            <p className="text-gray-500 text-sm mt-1">Add your first job to get started</p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
+            <p className="text-gray-400 text-sm mb-1">Jobs Discovered</p>
+            <h3 className="text-3xl font-bold text-white">{metrics.total_jobs_discovered}</h3>
           </div>
-          <Link to="/search" className="btn-primary">
-            Add Your First Job
-          </Link>
+          <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
+            <p className="text-gray-400 text-sm mb-1">Applications</p>
+            <h3 className="text-3xl font-bold text-white">{metrics.total_applications}</h3>
+          </div>
+          <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
+            <p className="text-gray-400 text-sm mb-1">Success Rate</p>
+            <h3 className="text-3xl font-bold text-white">{(metrics.success_rate * 100).toFixed(1)}%</h3>
+          </div>
+          <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
+            <p className="text-gray-400 text-sm mb-1">Avg Score</p>
+            <h3 className="text-3xl font-bold text-white">{metrics.average_score.toFixed(1)}</h3>
+          </div>
         </div>
-      ) : (
-        <div className="flex-1 overflow-x-auto">
-          <KanbanBoard jobs={jobs} />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
+            <h2 className="text-xl font-semibold text-white mb-6">Score Distribution</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={scoreDistributionData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, value }) => `${name}: ${value}`}
+                  outerRadius={100}
+                  dataKey="value"
+                >
+                  {COLORS.map((color, index) => (
+                    <Cell key={`cell-${index}`} fill={color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
+            <h2 className="text-xl font-semibold text-white mb-6">Jobs by Source</h2>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={sourceData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#4b5563" />
+                <XAxis dataKey="name" stroke="#9ca3af" />
+                <YAxis stroke="#9ca3af" />
+                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
+                <Bar dataKey="value" fill="#3b82f6" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      )}
+
+        <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
+          <h2 className="text-xl font-semibold text-white mb-6">Applications by ATS Platform</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={atsPlatformData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#4b5563" />
+              <XAxis dataKey="name" stroke="#9ca3af" />
+              <YAxis stroke="#9ca3af" />
+              <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
+              <Bar dataKey="value" fill="#8b5cf6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
-  )
-}
+  );
+};
+
+export { Dashboard };

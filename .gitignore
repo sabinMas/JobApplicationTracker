@@ -26,3 +26,15 @@ Thumbs.db
 .idea/
 
 .vercel
+
+# Deployment packages (large zip files)
+*.zip
+deploy-package-linux/
+venv-linux/
+infra/linux-package/
+infra/linux-simple-package/
+infra/docker-output/
+infra/docker-output-proper/
+infra/temp-linux-build/
+infra/deploy-package-linux/
+infra/deploy-package/

@@ -1,14 +1,19 @@
 """
 Automated job application scheduler endpoint.
-Allows setting up criteria for automatic applications.
+Allows setting up criteria for automatic applications and managing job sync schedules.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
+from datetime import datetime, timezone
 
 from ..database import get_db
 from ..services.auto_scheduler import apply_to_matching_jobs
+from ..services.job_sync_scheduler import get_scheduler
+from ..logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
 
@@ -145,4 +150,121 @@ async def test_criteria(
             for job in jobs[:10]  # Return first 10
         ],
         "preview": "Showing first 10 matches" if len(jobs) > 10 else None,
+    }
+
+
+
+# ============================================================================
+# Job Sync Scheduler Endpoints
+# ============================================================================
+
+
+@router.post("/jobs/sync")
+async def trigger_job_sync():
+    """
+    Manually trigger an immediate job sync from all configured sources.
+    
+    Returns sync statistics (added, duplicates, errors).
+    """
+    logger.info("Manual job sync triggered")
+    
+    scheduler = get_scheduler()
+    if not scheduler:
+        logger.warning("Job sync scheduler not initialized")
+        raise HTTPException(503, "Job sync scheduler not initialized")
+    
+    try:
+        result = await scheduler.sync_now()
+        return result
+    except Exception as e:
+        logger.error(f"Job sync failed: {e}", extra_fields={"error": str(e)})
+        raise HTTPException(500, f"Job sync failed: {str(e)}")
+
+
+@router.get("/jobs/config")
+async def get_job_sync_config():
+    """
+    Get current job sync scheduler configuration.
+    
+    Returns:
+        Scheduler config including interval, last sync time, etc.
+    """
+    scheduler = get_scheduler()
+    if not scheduler:
+        return {
+            "status": "not_initialized",
+            "message": "Job sync scheduler not yet initialized",
+        }
+    
+    config = scheduler.get_config()
+    logger.info("Job sync config retrieved", extra_fields=config)
+    
+    return config
+
+
+class JobSyncConfigUpdate(BaseModel):
+    """Update job sync configuration"""
+    interval_minutes: Optional[int] = None
+    enabled: Optional[bool] = None
+
+
+@router.put("/jobs/config")
+async def update_job_sync_config(config: JobSyncConfigUpdate):
+    """
+    Update job sync scheduler configuration.
+    
+    Args:
+        interval_minutes: Sync interval in minutes (minimum 5)
+        enabled: Enable/disable scheduler
+    """
+    scheduler = get_scheduler()
+    if not scheduler:
+        raise HTTPException(503, "Job sync scheduler not initialized")
+    
+    try:
+        if config.interval_minutes:
+            if config.interval_minutes < 5:
+                raise ValueError("Sync interval must be at least 5 minutes")
+            scheduler.set_sync_interval(config.interval_minutes)
+            logger.info("Job sync interval updated", extra_fields={
+                "interval_minutes": config.interval_minutes,
+            })
+        
+        updated_config = scheduler.get_config()
+        
+        return {
+            "status": "updated",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "config": updated_config,
+        }
+    
+    except ValueError as e:
+        logger.warning(f"Invalid job sync config: {e}")
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error(f"Failed to update job sync config: {e}", extra_fields={"error": str(e)})
+        raise HTTPException(500, f"Failed to update config: {str(e)}")
+
+
+@router.get("/jobs/status")
+async def get_job_sync_status():
+    """
+    Get current job sync scheduler status.
+    
+    Returns:
+        Status including whether scheduler is running, last sync time, next sync time.
+    """
+    scheduler = get_scheduler()
+    if not scheduler:
+        return {
+            "status": "not_initialized",
+            "is_running": False,
+            "message": "Job sync scheduler not yet initialized",
+        }
+    
+    config = scheduler.get_config()
+    
+    return {
+        "status": "ok" if scheduler.is_running else "idle",
+        **config,
     }

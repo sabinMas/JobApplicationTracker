@@ -9,15 +9,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_client = AsyncOpenAI(
-    api_key=os.getenv("CEREBRAS_API_KEY"),
-    base_url="https://api.cerebras.ai/v1",
-)
+_client = None
 MODEL = "gpt-oss-120b"
 
 
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.getenv("CEREBRAS_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("CEREBRAS_API_KEY not set")
+        _client = AsyncOpenAI(
+            api_key=api_key,
+            base_url="https://api.cerebras.ai/v1",
+        )
+    return _client
+
+
 async def _chat(system: str, user: str, temperature: float = 0.3) -> str:
-    resp = await _client.chat.completions.create(
+    resp = await _get_client().chat.completions.create(
         model=MODEL,
         messages=[
             {"role": "system", "content": system},

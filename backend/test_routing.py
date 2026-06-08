@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 from app.logging_config import setup_logging, get_logger
 from app.services.ats_routers import route_and_submit
 from app.services.ats_routers.greenhouse import GreenhouseRouter
+from app.services.ats_routers.lever import LeverRouter
 from app.services.ats_routers.form_fallback import FormFillerRouter
 
 setup_logging("development")
@@ -36,6 +37,30 @@ async def test_greenhouse_detection():
         ("https://company.greenhouse.io/jobs/123456?utm_source=linkedin", True),
         ("https://example.com/apply", False),
         ("https://lever.co/apply/123", False),
+    ]
+    
+    for url, should_handle in test_urls:
+        can_handle = await router.can_handle(url)
+        status = "[PASS]" if can_handle == should_handle else "[FAIL]"
+        print(f"{status} {url}")
+        print(f"  Expected: {should_handle}, Got: {can_handle}")
+        assert can_handle == should_handle, f"Failed for {url}"
+    
+    print()
+
+
+async def test_lever_detection():
+    """Test that Lever URLs are recognized"""
+    print("TEST 1B: Lever URL Detection")
+    print("-" * 60)
+    
+    router = LeverRouter()
+    
+    test_urls = [
+        ("https://company.lever.co/apply/123456", True),
+        ("https://company.lever.co/apply/posting-id?utm_source=linkedin", True),
+        ("https://example.com/apply", False),
+        ("https://company.greenhouse.io/jobs/123", False),
     ]
     
     for url, should_handle in test_urls:
@@ -133,6 +158,30 @@ async def test_greenhouse_extraction():
     print()
 
 
+async def test_lever_extraction():
+    """Test Lever posting ID extraction"""
+    print("TEST 4B: Lever Posting ID Extraction")
+    print("-" * 60)
+    
+    router = LeverRouter()
+    
+    test_cases = [
+        ("https://company.lever.co/apply/posting-123", "posting-123"),
+        ("https://company.lever.co/apply/job-456?utm_source=linkedin", "job-456"),
+        ("https://jobs.company.com/apply/xyz789", "xyz789"),
+        ("https://example.com/apply", ""),  # Invalid URL
+    ]
+    
+    for url, expected_id in test_cases:
+        extracted_id = router._extract_posting_id(url)
+        status = "[PASS]" if extracted_id == expected_id else "[FAIL]"
+        print(f"{status} {url}")
+        print(f"  Expected: {expected_id}, Got: {extracted_id}")
+        assert extracted_id == expected_id, f"Failed for {url}"
+    
+    print()
+
+
 async def test_submit_result_format():
     """Test that submit results have correct format"""
     print("TEST 5: Submission Result Format")
@@ -170,9 +219,11 @@ async def run_all_tests():
     """Run all routing tests"""
     try:
         await test_greenhouse_detection()
+        await test_lever_detection()
         await test_fallback_router()
         await test_router_order()
         await test_greenhouse_extraction()
+        await test_lever_extraction()
         await test_submit_result_format()
         
         print("=" * 60)
@@ -180,9 +231,11 @@ async def run_all_tests():
         print("=" * 60)
         print("\nKey Features Verified:")
         print("- [PASS] Greenhouse URL detection")
+        print("- [PASS] Lever URL detection")
         print("- [PASS] Form filler fallback routing")
-        print("- [PASS] Router priority (Greenhouse -> Form filler)")
-        print("- [PASS] Job ID extraction")
+        print("- [PASS] Router priority (Greenhouse -> Lever -> Form filler)")
+        print("- [PASS] Job ID extraction (Greenhouse)")
+        print("- [PASS] Posting ID extraction (Lever)")
         print("- [PASS] Result format compliance")
         print("")
         

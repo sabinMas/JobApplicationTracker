@@ -23,6 +23,7 @@ Usage:
 
 from .form_fallback import FormFillerRouter
 from .greenhouse import GreenhouseRouter
+from .lever import LeverRouter
 
 # Defer logger creation until it's actually needed
 _logger = None
@@ -38,6 +39,7 @@ def get_logger():
 # Router instances (order matters - checked in order)
 _routers = [
     GreenhouseRouter(),
+    LeverRouter(),
     FormFillerRouter(),  # Always last (fallback)
 ]
 
@@ -98,4 +100,5 @@ __all__ = [
     "route_and_submit",
     "FormFillerRouter",
     "GreenhouseRouter",
+    "LeverRouter",
 ]

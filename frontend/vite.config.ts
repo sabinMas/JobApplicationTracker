@@ -16,4 +16,20 @@ export default defineConfig({
       },
     },
   },
+  // Production build settings
+  build: {
+    sourcemap: false, // Disable sourcemaps for production
+    minify: 'terser',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split vendor chunks for better caching
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'tanstack-query': ['@tanstack/react-query'],
+          'lucide': ['lucide-react'],
+          'dnd': ['@hello-pangea/dnd'],
+        },
+      },
+    },
+  },
 })

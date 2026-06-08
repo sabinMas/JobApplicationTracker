@@ -43,6 +43,15 @@ class Job(Base):
     scraped_at = Column(DateTime(timezone=True))
     status = Column(String(50), default="discovered")  # discovered/saved/applying/applied/dropped
     notes = Column(Text)
+    
+    # AgentCore Scoring (Phase 4)
+    score = Column(Integer, nullable=True)  # 1-10 relevance score
+    score_reasoning = Column(Text, nullable=True)  # Why job got this score
+    score_strengths = Column(JSON, default=list)  # Positive factors
+    score_concerns = Column(JSON, default=list)  # Concerns/red flags
+    score_recommendation = Column(String(50), nullable=True)  # SUBMIT or SKIP
+    scored_at = Column(DateTime(timezone=True), nullable=True)  # When it was scored
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     applications = relationship("Application", back_populates="job", cascade="all, delete-orphan")

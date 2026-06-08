@@ -1,0 +1,27 @@
+# Dockerfile for building Lambda-compatible deployment package
+# AWS Lambda runs on Amazon Linux 2023 with Python 3.12
+FROM public.ecr.aws/lambda/python:3.12
+
+# Install zip utility (Amazon Linux 2023 uses microdnf)
+RUN microdnf install -y zip && microdnf clean all
+
+WORKDIR /tmp/build
+
+# Copy requirements
+COPY infra/requirements-lambda.txt .
+
+# Install dependencies into /var/task (Lambda's working directory)
+RUN pip install --target /var/task -r requirements-lambda.txt --no-cache-dir
+
+# Copy application code
+COPY backend/ /var/task/
+
+# Create a clean deployment package
+WORKDIR /var/task
+RUN rm -rf __pycache__ */__pycache__ venv .git .github .vscode .pytest_cache tests
+
+# Create zip file
+RUN zip -r /tmp/lambda-deploy-linux-fixed.zip . -x "*.pyc" "*.pyo" "__pycache__/*" ".*"
+
+# Copy zip file to output directory
+RUN mkdir -p /tmp/output && cp /tmp/lambda-deploy-linux-fixed.zip /tmp/output/

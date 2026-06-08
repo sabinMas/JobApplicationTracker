@@ -9,10 +9,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
-from playwright.async_api import async_playwright, Page, Browser, BrowserContext
+try:
+    from playwright.async_api import async_playwright, Page, Browser, BrowserContext
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    Page = None
+    Browser = None
+    BrowserContext = None
 
 from .websocket_manager import ws_manager
-from .cerebras_service import map_form_fields
 
 
 # Active sessions: session_id -> session state dict

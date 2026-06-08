@@ -2,15 +2,20 @@
 """
 Quick test to verify Cerebras API key works.
 Run: python test_api_key.py
+
+Note: This is a manual verification script, not a unit test.
+It requires CEREBRAS_API_KEY in .env
 """
 import asyncio
 import os
 import sys
+import pytest
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
 load_dotenv()
 
+@pytest.mark.skip(reason="Manual verification script - requires CEREBRAS_API_KEY")
 async def test_api():
     api_key = os.getenv("CEREBRAS_API_KEY")
     if not api_key:

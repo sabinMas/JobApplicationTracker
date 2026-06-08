@@ -3,7 +3,12 @@ Resume extraction using Cerebras AI.
 We use the Cerebras API instead of transformers/torch for lightweight deployment.
 """
 import logging
-import pdfplumber
+try:
+    import pdfplumber
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
+
 from . import cerebras_service
 
 logger = logging.getLogger(__name__)
@@ -11,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """Extract all text from a PDF file using pdfplumber."""
+    if not PDF_AVAILABLE:
+        raise RuntimeError("pdfplumber not installed")
     text_parts = []
     try:
         with pdfplumber.open(pdf_path) as pdf:

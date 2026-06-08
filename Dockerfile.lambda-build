@@ -1,0 +1,32 @@
+# Dockerfile for building Lambda deployment package
+# Build: docker build -f Dockerfile.lambda-build -t lambda-builder .
+# Run: docker run --rm -v $(pwd):/app lambda-builder
+
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install zip for packaging
+RUN apt-get update && apt-get install -y zip && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY infra/requirements-lambda.txt .
+
+# Create and use virtual environment (optional but good practice)
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install dependencies
+RUN pip install --upgrade pip && \
+    pip install -r requirements-lambda.txt
+
+# Copy source code
+COPY backend/ ./backend/
+COPY infra/ ./infra/
+COPY build_linux_deploy.sh .
+
+# Make script executable
+RUN chmod +x build_linux_deploy.sh
+
+# Default command - build the package
+CMD ["./build_linux_deploy.sh"]

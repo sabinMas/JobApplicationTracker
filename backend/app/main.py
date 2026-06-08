@@ -6,7 +6,9 @@ import os
 
 from .logging_config import setup_logging, get_logger
 from .database import init_db
-from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics
+from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics, dashboard, auto_apply_scored
+from .services.job_sources import JobSourceManager, RSSJobSource
+from .services.job_sync_scheduler import JobSyncScheduler, set_scheduler
 
 # Initialize structured logging
 setup_logging(os.getenv("ENVIRONMENT", "development"))
@@ -14,12 +16,14 @@ logger = get_logger(__name__)
 
 
 _db_initialized = False
+_job_sync_scheduler = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize DB in background without blocking startup
-    global _db_initialized
+    # Initialize DB and scheduler in background without blocking startup
+    global _db_initialized, _job_sync_scheduler
     asyncio.create_task(_init_db_background())
+    asyncio.create_task(_init_scheduler_background())
     yield
 
 
@@ -32,6 +36,26 @@ async def _init_db_background():
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"DB init error (will retry on first request): {e}", extra_fields={"error": str(e)})
+
+
+async def _init_scheduler_background():
+    global _job_sync_scheduler
+    try:
+        logger.info("Initializing job sync scheduler...")
+        
+        # Create job manager
+        job_manager = JobSourceManager()
+        
+        # Register default RSS sources (can be extended later)
+        # For now, just create manager, sources are added via API
+        
+        # Create scheduler
+        _job_sync_scheduler = JobSyncScheduler(job_manager)
+        set_scheduler(_job_sync_scheduler)
+        
+        logger.info("Job sync scheduler initialized successfully")
+    except Exception as e:
+        logger.error(f"Scheduler init error: {e}", extra_fields={"error": str(e)})
 
 
 app = FastAPI(
@@ -68,6 +92,8 @@ app.include_router(automation.router)
 app.include_router(auto_apply.router)
 app.include_router(scheduler.router)
 app.include_router(metrics.router)
+app.include_router(dashboard.router)  # Phase 4: Dashboard API
+app.include_router(auto_apply_scored.router)  # Phase 4: Scoring integration
 
 # WebSocket route is registered inside automation router as /api/automation/ws/{session_id}
 

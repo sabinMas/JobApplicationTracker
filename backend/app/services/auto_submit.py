@@ -4,7 +4,14 @@ Handles form detection, filling, and submission across different ATS platforms.
 """
 import asyncio
 from typing import Optional
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+
+try:
+    from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    Page = None
+    PlaywrightTimeoutError = Exception
 
 from .ats_integration import detect_ats_from_url, get_submit_button_selectors, get_form_field_selectors
 

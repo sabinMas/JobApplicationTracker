@@ -1,0 +1,37 @@
+# Dockerfile for building Linux-compatible Python package
+FROM python:3.12-slim
+
+WORKDIR /build
+
+# Copy requirements
+COPY infra/requirements-lambda.txt .
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    zip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create package directory
+RUN mkdir -p /package
+
+# Install dependencies to package directory
+RUN pip install --target /package -r requirements-lambda.txt
+
+# Copy application code
+COPY backend/ /package/
+
+# Clean up
+WORKDIR /package
+RUN find . -name "__pycache__" -type d -exec rm -rf {} + \
+    && find . -name "*.pyc" -delete \
+    && rm -rf tests venv .git .github .vscode .pytest_cache
+
+# Create zip
+RUN cd /package && zip -r /build/lambda-deploy-linux-proper.zip .
+
+# Make zip accessible
+VOLUME /output
+CMD ["cp", "/build/lambda-deploy-linux-proper.zip", "/output/"]
