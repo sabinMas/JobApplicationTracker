@@ -42,37 +42,37 @@ class JsonFormatter(logging.Formatter):
 class StructuredLogger(logging.Logger):
     """Custom logger with support for extra fields."""
 
-    def info(self, msg, extra_fields=None, **kwargs):
+    def info(self, msg, *args, extra_fields=None, **kwargs):
         """Log info with optional extra fields."""
         if extra_fields:
             extra = {"extra_fields": extra_fields}
         else:
             extra = {}
-        super().info(msg, extra=extra, **kwargs)
+        super().info(msg, *args, extra=extra, **kwargs)
 
-    def error(self, msg, extra_fields=None, **kwargs):
+    def error(self, msg, *args, extra_fields=None, **kwargs):
         """Log error with optional extra fields."""
         if extra_fields:
             extra = {"extra_fields": extra_fields}
         else:
             extra = {}
-        super().error(msg, extra=extra, **kwargs)
+        super().error(msg, *args, extra=extra, **kwargs)
 
-    def warning(self, msg, extra_fields=None, **kwargs):
+    def warning(self, msg, *args, extra_fields=None, **kwargs):
         """Log warning with optional extra fields."""
         if extra_fields:
             extra = {"extra_fields": extra_fields}
         else:
             extra = {}
-        super().warning(msg, extra=extra, **kwargs)
+        super().warning(msg, *args, extra=extra, **kwargs)
 
-    def debug(self, msg, extra_fields=None, **kwargs):
+    def debug(self, msg, *args, extra_fields=None, **kwargs):
         """Log debug with optional extra fields."""
         if extra_fields:
             extra = {"extra_fields": extra_fields}
         else:
             extra = {}
-        super().debug(msg, extra=extra, **kwargs)
+        super().debug(msg, *args, extra=extra, **kwargs)
 
 
 def setup_logging(environment: Optional[str] = None) -> logging.Logger:
