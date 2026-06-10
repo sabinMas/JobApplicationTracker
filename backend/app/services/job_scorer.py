@@ -1,242 +1,183 @@
 """
-Job Scoring Service - Uses Cerebras AI to score job relevance
+Job Scoring Service — scores how well a job fits *this* candidate.
 
-Scores jobs 1-10 based on:
-- Skill match
-- Salary alignment
-- Company reputation
-- Growth potential
-- Location preference
+Loads the Profile and SearchPreferences from the database itself so callers
+can't forget to pass them. Applies a free keyword pre-filter before spending
+AI tokens, then asks the AI for a structured 1-10 fit score.
 """
 
-import json
 import logging
-from typing import Optional, Dict, Any
-import httpx
-import os
 from datetime import datetime
+from typing import Any, Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..models import Job, Profile, SearchPreferences
+from . import ai_service
 
 logger = logging.getLogger(__name__)
 
+_SCORE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "number", "minimum": 1, "maximum": 10},
+        "reasoning": {"type": "string", "description": "2-3 sentence explanation"},
+        "strengths": {"type": "array", "items": {"type": "string"}},
+        "concerns": {"type": "array", "items": {"type": "string"}},
+        "recommendation": {"type": "string", "enum": ["SUBMIT", "SKIP"]},
+    },
+    "required": ["score", "reasoning", "strengths", "concerns", "recommendation"],
+}
 
-class JobScorer:
-    """Score jobs by relevance using Cerebras AI"""
 
-    def __init__(self):
-        self.api_key = os.getenv("CEREBRAS_API_KEY")
-        self.base_url = "https://api.cerebras.ai/v1"
-        self.model = "llama-3.1-70b"
-        self.client = None
+async def load_candidate_context(db: AsyncSession) -> tuple[Optional[Profile], Optional[SearchPreferences]]:
+    """Load the (single-row) Profile and SearchPreferences."""
+    profile = (await db.execute(select(Profile))).scalar_one_or_none()
+    prefs = (await db.execute(select(SearchPreferences))).scalar_one_or_none()
+    return profile, prefs
 
-    async def score_job(
-        self,
-        job_title: str,
-        company: str,
-        description: str,
-        salary_min: Optional[float] = None,
-        salary_max: Optional[float] = None,
-        location: Optional[str] = None,
-        user_profile: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Score a single job for relevance
 
-        Returns:
-            {
-                "score": 8.5,  # 1-10 scale
-                "reasoning": "Great salary match, strong skill alignment...",
-                "strengths": ["high salary", "remote", "skill match"],
-                "concerns": ["small company"],
-                "recommendation": "SUBMIT"  # or SKIP
-            }
-        """
-        try:
-            prompt = self._build_scoring_prompt(
-                job_title,
-                company,
-                description,
-                salary_min,
-                salary_max,
-                location,
-                user_profile,
-            )
+def prefilter_job(job: Job, prefs: Optional[SearchPreferences]) -> Optional[dict[str, Any]]:
+    """Cheap keyword screen before any AI call.
 
-            # Call Cerebras API
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": [{"role": "user", "content": prompt}],
-                        "temperature": 0.3,  # More deterministic
-                        "max_tokens": 500,
-                    },
-                    timeout=30.0,
-                )
+    Returns a complete score-result dict (score=1, SKIP) when the job is a
+    hard reject, or None when it should proceed to AI scoring.
+    """
+    if prefs is None:
+        return None
 
-            if response.status_code != 200:
-                logger.error(f"Cerebras API error: {response.status_code}")
-                return self._default_score("API Error")
+    text = " ".join(
+        filter(None, [job.title, job.description, job.requirements, job.location])
+    ).lower()
 
-            result = response.json()
-            content = result["choices"][0]["message"]["content"]
-
-            # Parse response
-            return self._parse_scoring_response(content)
-
-        except httpx.TimeoutException:
-            logger.warning(f"Timeout scoring job: {job_title}")
-            return self._default_score("Timeout")
-        except Exception as e:
-            logger.error(f"Error scoring job {job_title}: {e}")
-            return self._default_score(str(e))
-
-    def _build_scoring_prompt(self, job_title, company, description, salary_min, salary_max, location, user_profile):
-        """
-        Build the prompt for Cerebras to score the job
-
-        Scoring criteria:
-        - 8-10: Excellent match (high salary, strong skills, great company)
-        - 6-7: Good match (some concerns but overall positive)
-        - 4-5: Moderate match (significant tradeoffs)
-        - 1-3: Poor match (major concerns, likely waste of time)
-        """
-
-        salary_info = ""
-        if salary_min and salary_max:
-            salary_info = f"Salary range: ${salary_min:,} - ${salary_max:,}"
-        elif salary_min:
-            salary_info = f"Minimum salary: ${salary_min:,}"
-
-        location_info = f"Location: {location}" if location else "Location: Remote preferred"
-
-        user_info = ""
-        if user_profile:
-            user_info = f"""
-User Profile:
-- Target salary: ${user_profile.get('target_salary', 150000):,}
-- Preferred locations: {', '.join(user_profile.get('preferred_locations', ['Remote']))}
-- Skills: {', '.join(user_profile.get('skills', [])[:10])}
-- Experience level: {user_profile.get('experience_level', 'Mid-level')}
-            """
-
-        prompt = f"""
-Score this job on a scale of 1-10 based on how well it matches for a software engineer.
-
-Job Details:
-Title: {job_title}
-Company: {company}
-Description: {description[:1000]}...
-{salary_info}
-{location_info}
-
-{user_info}
-
-Scoring Criteria:
-- 8-10: Excellent match (strong salary, skill alignment, growth potential)
-- 6-7: Good match (most factors positive)
-- 4-5: Moderate match (some concerns)
-- 1-3: Poor match (major red flags)
-
-Provide your response in this exact JSON format:
-{{
-    "score": <number 1-10>,
-    "reasoning": "<2-3 sentence explanation>",
-    "strengths": ["<strength 1>", "<strength 2>"],
-    "concerns": ["<concern if any>"],
-    "recommendation": "<SUBMIT or SKIP>"
-}}
-
-Respond ONLY with the JSON, no other text.
-"""
-
-        return prompt
-
-    def _parse_scoring_response(self, content: str) -> Dict[str, Any]:
-        """
-        Parse Cerebras response and extract score
-        """
-        try:
-            # Extract JSON from response
-            content = content.strip()
-            if content.startswith("```"):
-                content = content.split("```")[1]
-                if content.startswith("json"):
-                    content = content[4:]
-
-            data = json.loads(content)
-
-            # Validate required fields
-            score = float(data.get("score", 5))
-            score = max(1, min(10, score))  # Clamp 1-10
-
+    for kw in prefs.avoid_keywords or []:
+        if kw.lower() in text:
             return {
-                "score": score,
-                "reasoning": data.get("reasoning", "N/A"),
-                "strengths": data.get("strengths", []),
-                "concerns": data.get("concerns", []),
-                "recommendation": data.get("recommendation", "SKIP"),
-                "parsed_at": datetime.utcnow().isoformat(),
+                "score": 1,
+                "reasoning": f"Rejected by pre-filter: contains avoid keyword '{kw}'.",
+                "strengths": [],
+                "concerns": [f"avoid keyword: {kw}"],
+                "recommendation": "SKIP",
+                "prefiltered": True,
             }
 
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse JSON response: {content[:100]}")
-            return self._default_score("Parse Error")
-        except Exception as e:
-            logger.error(f"Error parsing score response: {e}")
-            return self._default_score(str(e))
-
-    def _default_score(self, reason: str) -> Dict[str, Any]:
-        """
-        Return default score when API fails
-        Default to 5 (medium) to avoid missing jobs
-        """
+    if prefs.job_types and job.job_type and job.job_type not in prefs.job_types:
         return {
-            "score": 5.0,
-            "reasoning": f"Could not score job: {reason}. Defaulting to 5.",
+            "score": 2,
+            "reasoning": f"Rejected by pre-filter: job type '{job.job_type}' not in preferences.",
             "strengths": [],
-            "concerns": [reason],
-            "recommendation": "SKIP",  # Skip on error (conservative approach)
-            "is_default": True,
+            "concerns": [f"job type: {job.job_type}"],
+            "recommendation": "SKIP",
+            "prefiltered": True,
         }
 
-    async def score_multiple_jobs(
-        self, jobs: list, user_profile: Optional[Dict[str, Any]] = None
-    ) -> list:
-        """
-        Score multiple jobs (batch processing)
-        """
-        scored_jobs = []
-        for job in jobs:
-            try:
-                score_result = await self.score_job(
-                    job_title=job.get("title"),
-                    company=job.get("company"),
-                    description=job.get("description", ""),
-                    salary_min=job.get("salary_min"),
-                    salary_max=job.get("salary_max"),
-                    location=job.get("location"),
-                    user_profile=user_profile,
-                )
-                scored_jobs.append({**job, **score_result})
-            except Exception as e:
-                logger.error(f"Error scoring job {job.get('title')}: {e}")
-                scored_jobs.append({**job, **self._default_score(str(e))})
+    must_have = prefs.must_have_keywords or []
+    if must_have and not any(kw.lower() in text for kw in must_have):
+        return {
+            "score": 2,
+            "reasoning": "Rejected by pre-filter: mentions none of the must-have keywords.",
+            "strengths": [],
+            "concerns": ["no must-have keyword match"],
+            "recommendation": "SKIP",
+            "prefiltered": True,
+        }
 
-        return scored_jobs
+    return None
 
 
-# Singleton instance
-_scorer = None
+def _build_prompt(job: Job, profile: Optional[Profile], prefs: Optional[SearchPreferences]) -> tuple[str, str]:
+    system = (
+        "You are a job-fit evaluator for one specific candidate. Score how well a job "
+        "posting matches the candidate's niches, expertise, and preferences on a 1-10 scale.\n"
+        "Scoring: 8-10 = excellent fit (matches their niches and constraints, worth a "
+        "tailored application). 6-7 = good fit with some tradeoffs. 4-5 = moderate fit. "
+        "1-3 = poor fit or red flags.\n"
+        "Be strict: a generic match to their broad field is NOT enough for 8+; the role "
+        "should align with their specific niches and seniority. recommendation is SUBMIT "
+        "only for scores >= 7 with no disqualifying concerns."
+    )
+
+    candidate_lines: list[str] = []
+    if profile is not None:
+        candidate_lines.append(f"Summary: {profile.summary or 'N/A'}")
+        candidate_lines.append(f"Skills: {', '.join((profile.skills or [])[:20])}")
+        candidate_lines.append(f"Location: {profile.location or 'N/A'}")
+        for exp in (profile.experience or [])[:4]:
+            candidate_lines.append(
+                f"Experience: {exp.get('title', '?')} at {exp.get('company', '?')} "
+                f"({exp.get('start', '?')}–{exp.get('end', 'present')})"
+            )
+    if prefs is not None:
+        candidate_lines.append(f"Target roles: {', '.join(prefs.target_roles or [])}")
+        candidate_lines.append(f"Niches: {', '.join(prefs.niches or [])}")
+        candidate_lines.append(f"Seniority: {prefs.seniority or 'N/A'}")
+        if prefs.salary_floor:
+            candidate_lines.append(f"Salary floor: ${prefs.salary_floor:,}/yr")
+        locations = ", ".join(prefs.locations or [])
+        remote = "remote OK" if prefs.remote_ok else "remote NOT acceptable"
+        candidate_lines.append(f"Locations: {locations or 'N/A'} ({remote})")
+        if prefs.must_have_keywords:
+            candidate_lines.append(f"Wants to see: {', '.join(prefs.must_have_keywords)}")
+
+    user = (
+        f"CANDIDATE:\n" + "\n".join(candidate_lines) + "\n\n"
+        f"JOB POSTING:\n"
+        f"Title: {job.title}\n"
+        f"Company: {job.company}\n"
+        f"Location: {job.location or 'N/A'}\n"
+        f"Type: {job.job_type or 'N/A'}\n"
+        f"Salary: {job.salary_range or 'not stated'}\n"
+        f"Description: {(job.description or '')[:2500]}\n"
+        f"Requirements: {(job.requirements or '')[:1500]}"
+    )
+    return system, user
 
 
-async def get_scorer() -> JobScorer:
-    """Get or create scorer instance"""
-    global _scorer
-    if _scorer is None:
-        _scorer = JobScorer()
-    return _scorer
+async def score_job(db: AsyncSession, job: Job) -> dict[str, Any]:
+    """Score a job against the stored candidate context. Raises on AI failure —
+    callers decide the failure policy (the safe default is SKIP, never apply)."""
+    profile, prefs = await load_candidate_context(db)
+
+    rejected = prefilter_job(job, prefs)
+    if rejected is not None:
+        logger.info(f"Job {job.id} pre-filtered: {rejected['reasoning']}")
+        return rejected
+
+    system, user = _build_prompt(job, profile, prefs)
+    result = await ai_service.structured(system, user, _SCORE_SCHEMA, temperature=0.2)
+
+    score = max(1, min(10, float(result.get("score", 1))))
+    return {
+        "score": score,
+        "reasoning": result.get("reasoning", ""),
+        "strengths": result.get("strengths", []),
+        "concerns": result.get("concerns", []),
+        "recommendation": result.get("recommendation", "SKIP"),
+    }
+
+
+async def score_and_store(db: AsyncSession, job: Job, rescore: bool = False) -> dict[str, Any]:
+    """Score a job and persist the result onto the Job row."""
+    if job.score is not None and not rescore:
+        return {
+            "already_scored": True,
+            "score": job.score,
+            "reasoning": job.score_reasoning,
+            "strengths": job.score_strengths or [],
+            "concerns": job.score_concerns or [],
+            "recommendation": job.score_recommendation,
+        }
+
+    result = await score_job(db, job)
+
+    job.score = int(round(result["score"]))
+    job.score_reasoning = result["reasoning"]
+    job.score_strengths = result["strengths"]
+    job.score_concerns = result["concerns"]
+    job.score_recommendation = result["recommendation"]
+    job.scored_at = datetime.utcnow()
+    await db.commit()
+
+    logger.info(f"Scored job {job.id} '{job.title}': {job.score}/10 {job.score_recommendation}")
+    return result

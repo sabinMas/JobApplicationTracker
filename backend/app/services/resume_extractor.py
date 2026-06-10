@@ -9,7 +9,7 @@ try:
 except ImportError:
     PDF_AVAILABLE = False
 
-from . import cerebras_service
+from . import ai_service
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ async def parse_resume(pdf_path: str) -> dict:
     logger.info(f"Extracted {len(text)} characters from PDF, parsing with Cerebras...")
 
     # Use Cerebras to extract profile
-    profile = await cerebras_service.extract_profile(text)
+    profile = await ai_service.extract_profile(text)
 
     logger.info(f"✓ Parsed resume: {profile.get('full_name', 'Unknown')}")
     return profile

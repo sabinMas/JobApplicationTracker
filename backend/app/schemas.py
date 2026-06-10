@@ -29,6 +29,52 @@ class ProfileOut(ProfileUpdate):
         from_attributes = True
 
 
+# ─── Search Preferences ──────────────────────────────────────────────────────
+
+class SearchPreferencesUpdate(BaseModel):
+    target_roles: Optional[List[str]] = None
+    niches: Optional[List[str]] = None
+    must_have_keywords: Optional[List[str]] = None
+    avoid_keywords: Optional[List[str]] = None
+    salary_floor: Optional[int] = None
+    locations: Optional[List[str]] = None
+    remote_ok: Optional[bool] = None
+    seniority: Optional[str] = None
+    job_types: Optional[List[str]] = None
+    min_score_to_apply: Optional[int] = None
+    auto_submit_enabled: Optional[bool] = None
+    daily_application_limit: Optional[int] = None
+
+
+class SearchPreferencesOut(SearchPreferencesUpdate):
+    id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ─── Pipeline ────────────────────────────────────────────────────────────────
+
+class PipelineRunOut(BaseModel):
+    id: int
+    trigger: str
+    status: str
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    jobs_discovered: int
+    jobs_scored: int
+    jobs_enriched: int
+    applications_prepared: int
+    applications_submitted: int
+    applications_queued_for_review: int
+    errors: Optional[List[dict]] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ─── Job ─────────────────────────────────────────────────────────────────────
 
 class JobCreate(BaseModel):

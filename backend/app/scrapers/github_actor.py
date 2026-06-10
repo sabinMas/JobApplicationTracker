@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List
 from app.services.actor_framework import Actor
 from app.services.playwright_service import PlaywrightService
-from app.services.cerebras_service import extract_job
+from app.services.ai_service import extract_job
 
 logger = logging.getLogger(__name__)
 

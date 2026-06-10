@@ -6,9 +6,14 @@ from pathlib import Path
 import os
 
 from ..database import get_db
-from ..models import Profile, Document
-from ..schemas import ProfileUpdate, ProfileOut
-from ..services import pdf_service, cerebras_service, resume_extractor
+from ..models import Profile, Document, SearchPreferences
+from ..schemas import (
+    ProfileUpdate,
+    ProfileOut,
+    SearchPreferencesUpdate,
+    SearchPreferencesOut,
+)
+from ..services import ai_service, pdf_service, resume_extractor
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
@@ -101,3 +106,69 @@ async def extract_profile_from_resume(
     except Exception as e:
         print(f"ERROR extracting profile (outer catch): {type(e).__name__}: {str(e)}")
         raise HTTPException(500, f"Profile extraction failed: {str(e)}")
+
+
+# ─── Search Preferences ──────────────────────────────────────────────────────
+
+async def _get_or_create_preferences(db: AsyncSession) -> SearchPreferences:
+    result = await db.execute(select(SearchPreferences))
+    prefs = result.scalar_one_or_none()
+    if not prefs:
+        prefs = SearchPreferences(id=1)
+        db.add(prefs)
+        await db.commit()
+        await db.refresh(prefs)
+    return prefs
+
+
+@router.get("/preferences", response_model=SearchPreferencesOut)
+async def get_preferences(db: AsyncSession = Depends(get_db)):
+    """Get job search preferences (niches, keywords, thresholds)."""
+    return await _get_or_create_preferences(db)
+
+
+@router.put("/preferences", response_model=SearchPreferencesOut)
+async def update_preferences(
+    data: SearchPreferencesUpdate, db: AsyncSession = Depends(get_db)
+):
+    """Update job search preferences."""
+    prefs = await _get_or_create_preferences(db)
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(prefs, field, value)
+    await db.commit()
+    await db.refresh(prefs)
+    return prefs
+
+
+@router.post("/preferences/seed", response_model=SearchPreferencesOut)
+async def seed_preferences(db: AsyncSession = Depends(get_db)):
+    """Propose initial preferences from the stored profile using AI, persist,
+    and return them for review/editing."""
+    result = await db.execute(select(Profile))
+    profile = result.scalar_one_or_none()
+    if not profile or not (profile.skills or profile.experience or profile.summary):
+        raise HTTPException(
+            400, "Profile is empty — upload a resume via /api/profile/extract first."
+        )
+
+    profile_dict = {
+        "full_name": profile.full_name,
+        "location": profile.location,
+        "summary": profile.summary,
+        "skills": profile.skills or [],
+        "experience": profile.experience or [],
+        "education": profile.education or [],
+        "certifications": profile.certifications or [],
+    }
+    suggested = await ai_service.suggest_search_preferences(profile_dict)
+
+    prefs = await _get_or_create_preferences(db)
+    for field in (
+        "target_roles", "niches", "must_have_keywords", "avoid_keywords",
+        "salary_floor", "locations", "remote_ok", "seniority", "job_types",
+    ):
+        if field in suggested and suggested[field] is not None:
+            setattr(prefs, field, suggested[field])
+    await db.commit()
+    await db.refresh(prefs)
+    return prefs

@@ -7,8 +7,12 @@ import os
 from .logging_config import setup_logging, get_logger
 from .database import init_db
 from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics, dashboard, auto_apply_scored, scraper, job_enrichment
-from .services.job_sources import JobSourceManager, RSSJobSource
-from .services.job_sync_scheduler import JobSyncScheduler, set_scheduler
+from .services.job_sources import JobSourceManager
+from .services.job_sync_scheduler import (
+    JobSyncScheduler,
+    seed_sources_from_preferences,
+    set_scheduler,
+)
 from .services.actor_framework import actor_registry
 from .scrapers.test_actor import TestActor
 from .scrapers.linkedin_actor import LinkedInActor
@@ -61,12 +65,10 @@ async def _init_scheduler_background():
     try:
         logger.info("Initializing job sync scheduler...")
         
-        # Create job manager
+        # Create job manager and seed sources from the user's preferences
         job_manager = JobSourceManager()
-        
-        # Register default RSS sources (can be extended later)
-        # For now, just create manager, sources are added via API
-        
+        await seed_sources_from_preferences(job_manager)
+
         # Create scheduler
         _job_sync_scheduler = JobSyncScheduler(job_manager)
         set_scheduler(_job_sync_scheduler)

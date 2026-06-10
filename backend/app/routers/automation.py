@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from ..database import get_db
 from ..models import Application, Job, Document, Profile
 from ..schemas import AutomationStartRequest, AutomationSessionOut
-from ..services import playwright_service, cerebras_service, pdf_service
+from ..services import playwright_service, ai_service, pdf_service
 from ..services.websocket_manager import ws_manager
 
 
@@ -182,7 +182,7 @@ async def full_automate(body: FullAutomationRequest, db: AsyncSession = Depends(
 
     # Generate tailored documents
     try:
-        resume_md = await cerebras_service.tailor_resume(
+        resume_md = await ai_service.tailor_resume(
             job_description=job.description or "",
             job_requirements=job.requirements or "",
             base_resume_text=base_resume.content_text,
@@ -196,7 +196,7 @@ async def full_automate(body: FullAutomationRequest, db: AsyncSession = Depends(
         base_cls = cl_result.scalars().all()
         example_texts = [doc.content_text for doc in base_cls if doc.content_text]
 
-        cover_letter_text = await cerebras_service.generate_cover_letter(
+        cover_letter_text = await ai_service.generate_cover_letter(
             job_description=job.description or "",
             company=job.company,
             job_title=job.title,

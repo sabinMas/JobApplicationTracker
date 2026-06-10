@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Index
+from sqlalchemy import Boolean, Column, Integer, String, Text, DateTime, ForeignKey, JSON, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -22,6 +22,47 @@ class Profile(Base):
     certifications = Column(JSON, default=list)   # [{name, issuer, date}]
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class SearchPreferences(Base):
+    """Single-row (id=1) job search preferences — the definition of what a
+    'good fit' means. Used by job discovery (query generation) and scoring."""
+    __tablename__ = "search_preferences"
+
+    id = Column(Integer, primary_key=True, default=1)
+    target_roles = Column(JSON, default=list)        # ["Backend Engineer", "Platform Engineer"]
+    niches = Column(JSON, default=list)              # ["ML infra", "browser automation"]
+    must_have_keywords = Column(JSON, default=list)  # job must mention at least one
+    avoid_keywords = Column(JSON, default=list)      # hard-reject if present
+    salary_floor = Column(Integer, nullable=True)    # USD/year
+    locations = Column(JSON, default=list)           # ["Remote", "New York, NY"]
+    remote_ok = Column(Boolean, default=True)
+    seniority = Column(String(50), nullable=True)    # entry/mid/senior/staff
+    job_types = Column(JSON, default=list)           # ["full-time", "contract"]
+    min_score_to_apply = Column(Integer, default=8)  # 1-10
+    auto_submit_enabled = Column(Boolean, default=False)  # False = queue for review
+    daily_application_limit = Column(Integer, default=10)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class PipelineRun(Base):
+    """Summary of one daily automation pipeline execution."""
+    __tablename__ = "pipeline_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trigger = Column(String(50), default="manual")  # manual / scheduled
+    status = Column(String(50), default="running")  # running / completed / failed
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    jobs_discovered = Column(Integer, default=0)
+    jobs_scored = Column(Integer, default=0)
+    jobs_enriched = Column(Integer, default=0)
+    applications_prepared = Column(Integer, default=0)  # tailored docs created
+    applications_submitted = Column(Integer, default=0)
+    applications_queued_for_review = Column(Integer, default=0)
+    errors = Column(JSON, default=list)  # [{stage, message, timestamp}]
 
 
 class Job(Base):

@@ -13,8 +13,7 @@ import logging
 
 from ..database import get_db
 from ..models import Job, Application, Profile
-from ..services.auto_apply_with_scoring import get_scoring_filter
-from ..services.job_scorer import get_scorer
+from ..services import job_scorer
 from ..schemas import (
     ScoreJobsOut,
     ScoreJobsRequest,
@@ -77,38 +76,18 @@ async def score_all_jobs(
 
         logger.info(f"Found {len(jobs)} unscored jobs to score", extra={"count": len(jobs)})
 
-        scorer = await get_scorer()
         scores = []
         errors = 0
 
         for job in jobs:
             try:
-                # Score the job
-                score_result = await scorer.score_job(
-                    job_title=job.title,
-                    company=job.company,
-                    description=job.description or "",
-                    location=job.location,
-                )
-
-                # Store in database
-                job.score = int(score_result["score"])
-                job.score_reasoning = score_result.get("reasoning", "")
-                job.score_strengths = score_result.get("strengths", [])
-                job.score_concerns = score_result.get("concerns", [])
-                job.score_recommendation = score_result.get("recommendation", "SKIP")
-                job.scored_at = datetime.utcnow()
-
+                await job_scorer.score_and_store(db, job)
                 scores.append(job.score)
                 logger.debug(f"Scored job {job.id}: {job.score}/10")
-
             except Exception as e:
                 error_msg = f"Error scoring job {job.id}: {str(e)}"
                 logger.error(error_msg, extra={"job_id": job.id})
                 errors += 1
-
-        # Commit all scoring updates
-        await db.commit()
 
         # Calculate statistics
         avg_score = sum(scores) / len(scores) if scores else None

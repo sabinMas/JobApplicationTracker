@@ -42,7 +42,7 @@ S3_BUCKET = os.getenv("S3_BUCKET", "jobtracker-documents-245091941294")
 from app.models import Job, Application
 from app.services.scraper_service import scrape_job_url
 from app.services.playwright_service import PlaywrightService
-from app.services.cerebras_service import extract_job
+from app.services.ai_service import extract_job
 from app.services.actor_framework import actor_registry
 from app.services.actor_runner import execute_actor_run
 

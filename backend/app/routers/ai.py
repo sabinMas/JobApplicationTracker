@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from ..database import get_db
 from ..models import Job, Document, Profile, Application
 from ..schemas import TailorRequest, MapFieldsRequest
-from ..services import cerebras_service, pdf_service
+from ..services import ai_service, pdf_service
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -65,7 +65,7 @@ async def tailor_documents(body: TailorRequest, db: AsyncSession = Depends(get_d
     example_texts = [doc.content_text for doc in base_cls if doc.content_text]
 
     # --- Generate tailored resume ---
-    resume_md = await cerebras_service.tailor_resume(
+    resume_md = await ai_service.tailor_resume(
         job_description=job.description or "",
         job_requirements=job.requirements or "",
         base_resume_text=base_resume.content_text,
@@ -89,7 +89,7 @@ async def tailor_documents(body: TailorRequest, db: AsyncSession = Depends(get_d
     db.add(resume_doc)
 
     # --- Generate tailored cover letter ---
-    cover_letter_text = await cerebras_service.generate_cover_letter(
+    cover_letter_text = await ai_service.generate_cover_letter(
         job_description=job.description or "",
         company=job.company,
         job_title=job.title,
@@ -130,5 +130,5 @@ async def map_fields(body: MapFieldsRequest, db: AsyncSession = Depends(get_db))
     if not profile:
         raise HTTPException(400, "Profile not set up.")
     profile_dict = {k: v for k, v in profile.__dict__.items() if not k.startswith("_")}
-    mapping = await cerebras_service.map_form_fields(body.field_labels, profile_dict)
+    mapping = await ai_service.map_form_fields(body.field_labels, profile_dict)
     return {"mapping": mapping}

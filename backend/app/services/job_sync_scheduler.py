@@ -1,14 +1,19 @@
 """
 Job sync scheduler service.
 
-Manages periodic job synchronization from configured sources.
+Manages periodic job synchronization from configured sources, and seeds
+sources from the stored SearchPreferences so discovery targets the user's
+actual niches instead of starting empty.
 """
 
 import asyncio
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional
 
-from .job_sources import JobSourceManager
+from sqlalchemy import select
+
+from .job_sources import JobSourceManager, RSSJobSource
 from ..logging_config import get_logger
 
 # Defer logger
@@ -20,6 +25,66 @@ def get_logger_instance():
     if _logger is None:
         _logger = get_logger(__name__)
     return _logger
+
+
+# Feeds that cover remote software roles broadly; niche-specific feeds are
+# added on top from SearchPreferences.
+_BASE_FEEDS: list[tuple[str, str]] = [
+    ("weworkremotely", "https://weworkremotely.com/categories/remote-programming-jobs.rss"),
+    ("remoteok", "https://remoteok.com/remote-dev-jobs.rss"),
+]
+
+_MAX_NICHE_FEEDS = 6
+
+
+def _slugify(keyword: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", keyword.lower()).strip("-")
+
+
+async def seed_sources_from_preferences(job_manager: JobSourceManager) -> int:
+    """Register RSS job sources derived from the stored SearchPreferences.
+
+    Returns the number of sources registered. Safe to call when preferences
+    don't exist yet — base feeds are always registered.
+    """
+    logger = get_logger_instance()
+
+    for name, url in _BASE_FEEDS:
+        job_manager.add_source(RSSJobSource(url, name=name))
+
+    keywords: list[str] = []
+    try:
+        from ..database import AsyncSessionLocal
+        from ..models import SearchPreferences
+
+        async with AsyncSessionLocal() as session:
+            prefs = (await session.execute(select(SearchPreferences))).scalar_one_or_none()
+        if prefs:
+            keywords = list(prefs.niches or []) + list(prefs.target_roles or [])
+    except Exception as e:
+        logger.warning(f"Could not load preferences for source seeding: {e}")
+
+    added = 0
+    for keyword in keywords:
+        if added >= _MAX_NICHE_FEEDS:
+            break
+        slug = _slugify(keyword)
+        if not slug:
+            continue
+        name = f"remoteok-{slug}"
+        if name in job_manager.sources:
+            continue
+        job_manager.add_source(
+            RSSJobSource(f"https://remoteok.com/remote-{slug}-jobs.rss", name=name)
+        )
+        added += 1
+
+    total = len(job_manager.sources)
+    logger.info(
+        "Seeded job sources from preferences",
+        extra_fields={"sources": list(job_manager.sources.keys()), "count": total},
+    )
+    return total
 
 
 class JobSyncScheduler:
