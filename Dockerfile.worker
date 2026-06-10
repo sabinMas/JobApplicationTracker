@@ -1,30 +1,33 @@
-# ECS Fargate worker for job scraping and actor runs
-FROM python:3.12-slim
+# ECS Fargate worker for job scraping, actor runs, and auto-apply
+# Uses official Playwright image (includes Chromium + system deps)
+FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
 
 WORKDIR /app
 
-# Install system dependencies - minimal set for Playwright
+# Install Node.js 20 (needed for @playwright/mcp in AgenticScraperActor)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libnss3 \
-    libxss1 \
-    libasound2 \
-    fonts-liberation \
-    xdg-utils \
-    libpango-1.0-0 \
-    libpangoft2-1.0-0 \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Install @playwright/mcp globally for the agentic actor
+RUN npm install -g @anthropic-ai/mcp@latest @playwright/mcp@latest
 
 # Copy requirements and install Python dependencies
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers (needed for Chromium)
-RUN python -m playwright install
+# Playwright browsers are pre-installed in the base image — skip install
 
-# Copy app code and worker main
+# Copy app code and worker entry
 COPY backend/app ./app
 COPY backend/worker_main.py .
+
+# Non-root user (base image runs as root; switch for least privilege)
+RUN useradd -m worker && chown -R worker:worker /app
+USER worker
 
 # Run worker
 CMD ["python", "worker_main.py"]
