@@ -49,13 +49,20 @@ export function ProfilePage() {
         </button>
       </div>
 
-      {/* Extracted from onboarding */}
-      <div className="card p-5 bg-emerald-50 border-emerald-300">
-        <p className="text-sm text-emerald-900">
-          ✅ Your profile was extracted from your resume during onboarding.
-          Edit any fields below and click Save to update.
-        </p>
-      </div>
+      {/* Show guidance based on profile state */}
+      {profile && (profile.skills?.length || profile.experience?.length || profile.full_name) ? (
+        <div className="card p-5 bg-emerald-50 border-emerald-300">
+          <p className="text-sm text-emerald-900">
+            ✅ Your profile was extracted from your resume. Edit any fields below and click Save to update.
+          </p>
+        </div>
+      ) : (
+        <div className="card p-5 bg-amber-50 border-amber-300">
+          <p className="text-sm text-amber-900">
+            📝 Fill in your profile below, or upload a resume on the Documents page to auto-extract your info.
+          </p>
+        </div>
+      )}
 
       {/* Personal Info */}
       <div className="card p-5 space-y-4">
