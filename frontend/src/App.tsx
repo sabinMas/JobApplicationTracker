@@ -1,10 +1,9 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Search, User, FileText, Briefcase, Settings2, Workflow } from 'lucide-react'
+import { LayoutDashboard, Search, User, Briefcase, Settings2, Workflow } from 'lucide-react'
 import { Dashboard } from './pages/Dashboard'
 import { JobSearch } from './pages/JobSearch'
 import { ApplicationDetail } from './pages/ApplicationDetail'
 import { ProfilePage } from './pages/Profile'
-import { Documents } from './pages/Documents'
 import { Onboarding } from './pages/Onboarding'
 import { PreferencesPage } from './pages/Preferences'
 import { PipelinePage } from './pages/Pipeline'
@@ -16,7 +15,6 @@ const NAV = [
   { to: '/pipeline',    icon: Workflow,         label: 'Pipeline',     end: false },
   { to: '/preferences', icon: Settings2,       label: 'Preferences',  end: false },
   { to: '/profile',     icon: User,            label: 'Profile',      end: false },
-  { to: '/documents',   icon: FileText,        label: 'Documents',    end: false },
 ]
 
 function AppContent() {
@@ -85,7 +83,6 @@ function AppContent() {
             <Route path="/pipeline"      element={<PipelinePage />} />
             <Route path="/preferences"   element={<PreferencesPage />} />
             <Route path="/profile"       element={<ProfilePage />} />
-            <Route path="/documents"     element={<Documents />} />
           </Routes>
         </div>
       </main>

@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save, Plus, Trash2, Loader2, CheckCircle } from 'lucide-react'
-import { getProfile, updateProfile, Profile } from '../api/client'
+import { Save, Plus, Trash2, Loader2, CheckCircle, FileText, Clock } from 'lucide-react'
+import { getProfile, updateProfile, Profile, getDocuments, deleteDocument } from '../api/client'
+import { DocumentUpload } from '../components/DocumentUpload'
+import { formatDistanceToNow } from 'date-fns'
 
 export function ProfilePage() {
   const qc = useQueryClient()
   const { data: profile, isLoading } = useQuery({ queryKey: ['profile'], queryFn: getProfile })
+  const { data: documents = [] } = useQuery({ queryKey: ['documents'], queryFn: getDocuments })
   const [form, setForm] = useState<Profile>({})
   const [saved, setSaved] = useState(false)
   const [skillInput, setSkillInput] = useState('')
@@ -23,6 +26,11 @@ export function ProfilePage() {
     },
   })
 
+  const deleteMut = useMutation({
+    mutationFn: deleteDocument,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['documents'] }),
+  })
+
   const set = (field: keyof Profile) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [field]: e.target.value }))
 
@@ -32,12 +40,16 @@ export function ProfilePage() {
     </div>
   )
 
+  const baseResumes = documents.filter(d => d.type === 'resume' && d.variant === 'base')
+  const baseCoverLetters = documents.filter(d => d.type === 'cover_letter' && d.variant === 'base')
+  const tailoredDocs = documents.filter(d => d.variant === 'tailored')
+
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">My Profile</h1>
-          <p className="text-gray-600 text-sm mt-1">This data powers AI resume tailoring and form autofill</p>
+          <h1 className="text-2xl font-bold text-gray-800">Profile & Documents</h1>
+          <p className="text-gray-600 text-sm mt-1">Your info powers AI tailoring, scoring, and form autofill</p>
         </div>
         <button
           className="btn-primary flex items-center gap-2"
@@ -49,7 +61,7 @@ export function ProfilePage() {
         </button>
       </div>
 
-      {/* Show guidance based on profile state */}
+      {/* Guidance */}
       {profile && (profile.skills?.length || profile.experience?.length || profile.full_name) ? (
         <div className="card p-5 bg-emerald-50 border-emerald-300">
           <p className="text-sm text-emerald-900">
@@ -59,7 +71,7 @@ export function ProfilePage() {
       ) : (
         <div className="card p-5 bg-amber-50 border-amber-300">
           <p className="text-sm text-amber-900">
-            📝 Fill in your profile below, or upload a resume on the Documents page to auto-extract your info.
+            📝 Fill in your profile below, or upload a resume at the bottom of this page to auto-extract your info.
           </p>
         </div>
       )}
@@ -224,6 +236,84 @@ export function ProfilePage() {
           </div>
         ))}
       </div>
+
+      {/* ═══════════════ Documents Section ═══════════════ */}
+      <div className="border-t border-parchment-300 pt-8">
+        <h2 className="text-xl font-bold text-gray-800 mb-1">Documents</h2>
+        <p className="text-gray-600 text-sm mb-6">
+          Upload your base resume and cover letter examples. AI uses them to generate tailored versions for each job.
+        </p>
+      </div>
+
+      {/* Base resume upload */}
+      <div className="card p-5 space-y-4">
+        <h3 className="font-semibold text-gray-800">Base Resume</h3>
+        <p className="text-sm text-gray-600">
+          Upload your master resume PDF. AI will use it as the foundation for all tailored versions.
+        </p>
+        <DocumentUpload docType="resume" label="Base Resume" />
+        <div className="space-y-2">
+          {baseResumes.map(doc => <DocRow key={doc.id} doc={doc} onDelete={() => deleteMut.mutate(doc.id)} />)}
+          {baseResumes.length === 0 && (
+            <p className="text-xs text-gray-600 italic">No resume uploaded yet.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Cover letter examples */}
+      <div className="card p-5 space-y-4">
+        <h3 className="font-semibold text-gray-800">Cover Letter Examples</h3>
+        <p className="text-sm text-gray-600">
+          Upload 1–3 cover letter PDFs you're proud of. AI will match their tone and style when generating new ones.
+        </p>
+        <DocumentUpload docType="cover_letter" label="Cover Letter Example" />
+        <div className="space-y-2">
+          {baseCoverLetters.map(doc => <DocRow key={doc.id} doc={doc} onDelete={() => deleteMut.mutate(doc.id)} />)}
+          {baseCoverLetters.length === 0 && (
+            <p className="text-xs text-gray-600 italic">No cover letters uploaded yet.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Generated tailored documents */}
+      {tailoredDocs.length > 0 && (
+        <div className="card p-5 space-y-4">
+          <h3 className="font-semibold text-gray-800">
+            AI-Generated Documents
+            <span className="ml-2 text-xs bg-parchment-200 text-gray-600 rounded-full px-2 py-0.5">
+              {tailoredDocs.length}
+            </span>
+          </h3>
+          <div className="space-y-2">
+            {tailoredDocs.map(doc => <DocRow key={doc.id} doc={doc} onDelete={() => deleteMut.mutate(doc.id)} />)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Document row component ──────────────────────────────────────────────────
+
+function DocRow({ doc, onDelete }: { doc: { id: number; filename: string; type: string; created_at?: string }; onDelete: () => void }) {
+  return (
+    <div className="flex items-center gap-3 bg-parchment-100 rounded-xl p-3">
+      <FileText size={18} className={doc.type === 'resume' ? 'text-brand-600' : 'text-purple-600'} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-gray-800 truncate">{doc.filename}</p>
+        {doc.created_at && (
+          <p className="text-xs text-gray-600 flex items-center gap-1 mt-0.5">
+            <Clock size={10} />
+            {formatDistanceToNow(new Date(doc.created_at), { addSuffix: true })}
+          </p>
+        )}
+      </div>
+      <button
+        onClick={onDelete}
+        className="text-gray-600 hover:text-red-600 transition-colors p-1.5"
+      >
+        <Trash2 size={15} />
+      </button>
     </div>
   )
 }
