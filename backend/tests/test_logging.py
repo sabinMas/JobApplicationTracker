@@ -9,10 +9,7 @@ import sys
 import os
 import json
 
-# Add app to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "app"))
-
-from logging_config import setup_logging, get_logger
+from app.logging_config import setup_logging, get_logger
 
 def test_basic_logging():
     """Test basic logging functionality."""
@@ -73,7 +70,7 @@ def test_json_format():
     log_capture = io.StringIO()
     handler = logging.StreamHandler(log_capture)
     
-    from logging_config import JsonFormatter
+    from app.logging_config import JsonFormatter
     handler.setFormatter(JsonFormatter())
     logger.addHandler(handler)
     

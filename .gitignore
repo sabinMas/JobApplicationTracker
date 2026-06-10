@@ -1,40 +1,36 @@
 # Python
 backend/venv/
-backend/__pycache__/
-backend/app/__pycache__/
-backend/app/routers/__pycache__/
-backend/app/services/__pycache__/
-backend/.env
+__pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+
+# Secrets — never commit
+backend/.env
+backend/.env.*
+!backend/.env.example
+infra/env-vars.json
+*.pem
 
 # Node
 frontend/node_modules/
 frontend/dist/
 
 # Data (personal files — do NOT commit)
-data/app.db
-data/documents/
-data/generated/
+data/
+
+# Build/deploy artifacts
+*.zip
+deploy-package/
+deploy-package-linux/
+venv-linux/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE / tooling
 .vscode/
 .idea/
-
 .vercel
-
-# Deployment packages (large zip files)
-*.zip
-deploy-package-linux/
-venv-linux/
-infra/linux-package/
-infra/linux-simple-package/
-infra/docker-output/
-infra/docker-output-proper/
-infra/temp-linux-build/
-infra/deploy-package-linux/
-infra/deploy-package/
+.claude/scheduled_tasks.lock
