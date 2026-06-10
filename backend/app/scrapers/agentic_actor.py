@@ -19,7 +19,13 @@ import aioboto3
 from pydantic import BaseModel, ValidationError
 
 from app.services.actor_framework import Actor
-from app.services.mcp_browser import MCPBrowser
+
+# MCPBrowser is only available in the worker container (requires 'mcp' package)
+MCPBrowser = None
+try:
+    from app.services.mcp_browser import MCPBrowser
+except ImportError:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +114,7 @@ class AgenticScraperActor(Actor):
             "any forms, and do not apply to anything."
         )
 
-        async with MCPBrowser() as browser:
+        async with MCPBrowser() as browser:  # type: ignore[misc]
             tools = browser.bedrock_tool_config() + [_SUBMIT_TOOL]
             return await self._agent_loop(task, tools, browser, max_results)
 
