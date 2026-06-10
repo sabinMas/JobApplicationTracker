@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-import boto3
+import aioboto3
 import httpx
 
 from app.models import ScraperRun, Dataset, Actor as ActorModel
@@ -16,7 +16,7 @@ from app.services.s3_service import s3_service
 
 logger = logging.getLogger(__name__)
 
-sqs = boto3.client("sqs", region_name="us-east-1")
+_boto_session = aioboto3.Session()
 
 
 async def enqueue_actor_run(
@@ -57,7 +57,11 @@ async def enqueue_actor_run(
         "actor_name": actor_name,
         "input_config": input_config,
     }
-    sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps(message))
+    import os
+    async with _boto_session.client(
+        "sqs", region_name=os.getenv("AWS_REGION", "us-east-1")
+    ) as sqs:
+        await sqs.send_message(QueueUrl=queue_url, MessageBody=json.dumps(message))
 
     logger.info(f"Enqueued run {run_id} to SQS")
     return run_id
@@ -105,13 +109,13 @@ async def execute_actor_run(
 
         # Create dataset record
         dataset = Dataset(
-            run_id=run_id,
             s3_bucket=s3_service.bucket_name,
             s3_key=s3_key,
             item_count=len(items),
             item_schema=items[0] if items else {},
         )
         db.add(dataset)
+        await db.flush()  # assign dataset.id before linking the run
 
         # Mark run complete
         run.status = "success"
@@ -162,5 +166,7 @@ async def _call_webhook(url: str, payload: Dict[str, Any]) -> None:
 def get_scraper_queue_url() -> str:
     """Get the SQS queue URL for scraper tasks."""
     import os
-    # Could also store in DB or config
-    return os.getenv("SCRAPER_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/245091941294/jobtracker-scraper-runs")
+    url = os.getenv("SQS_QUEUE_URL", os.getenv("SCRAPER_QUEUE_URL", ""))
+    if not url:
+        raise RuntimeError("SQS_QUEUE_URL not configured")
+    return url

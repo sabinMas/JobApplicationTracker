@@ -9,8 +9,10 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 from ..database import get_db
+from ..schemas import PipelineRunOut
 from ..services.auto_scheduler import apply_to_matching_jobs
 from ..services.job_sync_scheduler import get_scheduler
+from ..services.pipeline import run_pipeline
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -54,6 +56,32 @@ async def apply_to_matching_now(
         "applied_count": len(results.get("applied", [])),
         "failed_count": len(results.get("failed", [])),
     }
+
+
+@router.post("/run-pipeline", response_model=PipelineRunOut)
+async def trigger_pipeline(db: AsyncSession = Depends(get_db)):
+    """
+    Run the full automation pipeline now:
+    discover → score → enrich → tailor → submit/queue-for-review.
+
+    This is the same flow the daily EventBridge schedule triggers.
+    """
+    return await run_pipeline(db, trigger="manual")
+
+
+@router.get("/pipeline-runs", response_model=List[PipelineRunOut])
+async def list_pipeline_runs(
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db),
+):
+    """Most recent pipeline run summaries (newest first)."""
+    from sqlalchemy import select
+    from ..models import PipelineRun
+
+    result = await db.execute(
+        select(PipelineRun).order_by(PipelineRun.started_at.desc()).limit(min(limit, 50))
+    )
+    return result.scalars().all()
 
 
 @router.post("/schedule")

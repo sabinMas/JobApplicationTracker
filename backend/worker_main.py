@@ -119,6 +119,28 @@ async def process_scraping_task(task: dict, db: AsyncSession) -> bool:
         await pw_service.close() if 'pw_service' in locals() else None
 
 
+async def process_auto_apply_task(message: dict, db: AsyncSession) -> bool:
+    """Execute a full auto-apply for an application (Playwright lives here)."""
+    from app.services.auto_apply_service import (
+        AutoApplyPreconditionError,
+        run_full_auto_apply,
+    )
+
+    application_id = message.get("application_id")
+    try:
+        result = await run_full_auto_apply(db, application_id)
+        logger.info(f"Auto-apply for application {application_id}: {result.get('status')}")
+        # error status still counts as processed — retries are handled by the
+        # application-level retry tracking, not by SQS redelivery
+        return True
+    except AutoApplyPreconditionError as e:
+        logger.error(f"Auto-apply precondition failed for {application_id}: {e}")
+        return True  # retrying won't fix a missing resume/profile — drop it
+    except Exception as e:
+        logger.error(f"Auto-apply crashed for {application_id}: {e}", exc_info=True)
+        return False
+
+
 async def dispatch_message(message: dict, db: AsyncSession) -> bool:
     """
     Dispatch a message to the appropriate handler based on type.
@@ -126,7 +148,10 @@ async def dispatch_message(message: dict, db: AsyncSession) -> bool:
     Returns True if processed successfully, False otherwise.
     """
     # Determine message type
-    if "run_id" in message:
+    if message.get("action") == "auto_apply":
+        logger.info("Dispatching to auto-apply handler")
+        return await process_auto_apply_task(message, db)
+    elif "run_id" in message:
         # Actor run message (Phase 5: Mini-Apify)
         run_id = message.get("run_id")
         logger.info(f"Dispatching to actor runner: run_id={run_id}")
