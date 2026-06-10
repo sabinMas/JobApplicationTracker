@@ -17,7 +17,7 @@ from ..services import ai_service, pdf_service, resume_extractor
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
-DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).parent.parent.parent.parent / "data"))
+DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp/data" if os.getenv("AWS_LAMBDA_FUNCTION_NAME") else str(Path(__file__).parent.parent.parent.parent / "data")))
 
 
 @router.get("", response_model=ProfileOut)

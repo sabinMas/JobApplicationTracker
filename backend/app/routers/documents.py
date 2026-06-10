@@ -14,7 +14,7 @@ from ..services import pdf_service
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
-DATA_DIR = Path(os.getenv("DATA_DIR", Path(__file__).parent.parent.parent.parent / "data"))
+DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp/data" if os.getenv("AWS_LAMBDA_FUNCTION_NAME") else str(Path(__file__).parent.parent.parent.parent / "data")))
 
 
 @router.get("", response_model=List[DocumentOut])
