@@ -66,11 +66,11 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
             <p className="text-gray-400 text-sm mb-1">Success Rate</p>
-            <h3 className="text-3xl font-bold text-white">{(metrics.success_rate * 100).toFixed(1)}%</h3>
+            <h3 className="text-3xl font-bold text-white">{((metrics.success_rate ?? 0) * 100).toFixed(1)}%</h3>
           </div>
           <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
             <p className="text-gray-400 text-sm mb-1">Avg Score</p>
-            <h3 className="text-3xl font-bold text-white">{metrics.average_score.toFixed(1)}</h3>
+            <h3 className="text-3xl font-bold text-white">{(metrics.scoring_stats?.avg_score ?? 0).toFixed(1)}</h3>
           </div>
         </div>
 
