@@ -1,18 +1,22 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Search, User, FileText, Briefcase } from 'lucide-react'
+import { LayoutDashboard, Search, User, FileText, Briefcase, Settings2, Workflow } from 'lucide-react'
 import { Dashboard } from './pages/Dashboard'
 import { JobSearch } from './pages/JobSearch'
 import { ApplicationDetail } from './pages/ApplicationDetail'
 import { ProfilePage } from './pages/Profile'
 import { Documents } from './pages/Documents'
 import { Onboarding } from './pages/Onboarding'
+import { PreferencesPage } from './pages/Preferences'
+import { PipelinePage } from './pages/Pipeline'
 import clsx from 'clsx'
 
 const NAV = [
-  { to: '/',         icon: LayoutDashboard, label: 'Dashboard',  end: true },
-  { to: '/search',   icon: Search,          label: 'Add Job',    end: false },
-  { to: '/profile',  icon: User,            label: 'Profile',    end: false },
-  { to: '/documents',icon: FileText,        label: 'Documents',  end: false },
+  { to: '/',            icon: LayoutDashboard, label: 'Dashboard',    end: true },
+  { to: '/search',      icon: Search,          label: 'Add Job',      end: false },
+  { to: '/pipeline',    icon: Workflow,         label: 'Pipeline',     end: false },
+  { to: '/preferences', icon: Settings2,       label: 'Preferences',  end: false },
+  { to: '/profile',     icon: User,            label: 'Profile',      end: false },
+  { to: '/documents',   icon: FileText,        label: 'Documents',    end: false },
 ]
 
 function AppContent() {
@@ -65,8 +69,8 @@ function AppContent() {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-parchment-300">
           <p className="text-[10px] text-gray-600 leading-relaxed">
-            All data stored locally.
-            <br />No cloud. No tracking.
+            AI-powered job automation.
+            <br />Bedrock + Lambda + ECS.
           </p>
         </div>
       </aside>
@@ -78,6 +82,8 @@ function AppContent() {
             <Route path="/"              element={<Dashboard />} />
             <Route path="/search"        element={<JobSearch />} />
             <Route path="/jobs/:id"      element={<ApplicationDetail />} />
+            <Route path="/pipeline"      element={<PipelinePage />} />
+            <Route path="/preferences"   element={<PreferencesPage />} />
             <Route path="/profile"       element={<ProfilePage />} />
             <Route path="/documents"     element={<Documents />} />
           </Routes>
