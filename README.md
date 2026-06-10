@@ -1,6 +1,6 @@
 # Job Application Tracker
 
-A full-stack dashboard that automates the job application process — powered by Cerebras AI, Playwright, and AWS Lambda.
+A full-stack job automation platform — discovers jobs, scores them with AI, tailors resumes, and auto-applies via browser automation. Runs on AWS Lambda + ECS Fargate with zero idle cost.
 
 **Live**: https://jobapptracker-n60pbf6ah-sabinmas-projects.vercel.app
 
@@ -8,13 +8,15 @@ A full-stack dashboard that automates the job application process — powered by
 
 ## Features
 
+- **Daily pipeline** — automated discover → score → enrich → tailor → submit (8 AM EST)
 - **Kanban board** — drag jobs across Discovered → Applied → Interview → Offer
-- **URL import** — paste any job URL (LinkedIn, Indeed, ZipRecruiter, Handshake) and AI extracts all details
-- **Greenhouse search** — browse open roles directly from any company's board
-- **AI tailoring** — Cerebras 70B generates a custom resume and cover letter per job
-- **Playwright auto-apply** — real browser fills forms and submits applications automatically
-- **Job scoring** — AgentCore scores each job 1–10 based on your profile match
-- **ATS support** — Greenhouse, Lever, Workday, Taleo, LinkedIn, Indeed, ZipRecruiter, custom forms
+- **URL import** — paste any job URL and AI extracts all details
+- **Search Preferences** — define target roles, niches, keywords, salary floor
+- **AI scoring** — Bedrock Claude scores each job 1–10 against your preferences
+- **AI tailoring** — Bedrock Sonnet generates custom resume + cover letter per job
+- **Playwright auto-apply** — real browser fills forms and submits (ECS worker)
+- **MCP agentic scraper** — @playwright/mcp actor for complex job board navigation
+- **ATS support** — Greenhouse, Lever, Workday, Taleo, LinkedIn, Indeed, ZipRecruiter
 
 ---
 
@@ -73,11 +75,14 @@ JobApplicationTracker/
 
 | Variable | Description |
 |---|---|
-| `CEREBRAS_API_KEY` | Cerebras API key |
-| `DATA_DIR` | Path to data folder (default: `../data`) |
-| `DATABASE_URL` | SQLite URL (default: `sqlite+aiosqlite:///../data/app.db`) |
+| `DATABASE_URL` | PostgreSQL async URL (default: SQLite for local dev) |
 | `ALLOWED_ORIGINS` | CORS origins (e.g. `http://localhost:5173`) |
 | `ENVIRONMENT` | `development` or `production` |
+| `SQS_QUEUE_URL` | SQS queue for worker tasks (auto-set by CloudFormation) |
+| `S3_BUCKET` | Document storage bucket |
+| `AWS_REGION` | AWS region (default: `us-east-1`) |
+
+> **Note**: Bedrock uses IAM role auth — no API keys needed. Cerebras key is optional (legacy).
 
 ---
 
@@ -85,14 +90,10 @@ JobApplicationTracker/
 
 | Topic | File |
 |---|---|
-| Architecture & design decisions | [docs/architecture/overview.md](docs/architecture/overview.md) |
-| API reference | [docs/api/reference.md](docs/api/reference.md) |
-| Deployment guide | [docs/deployment/guide.md](docs/deployment/guide.md) |
-| Credentials setup | [docs/getting-started/credentials.md](docs/getting-started/credentials.md) |
-| Quickstart (live) | [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md) |
+| Architecture overview | [docs/architecture/overview.md](docs/architecture/overview.md) |
+| AWS serverless deployment | [docs/deployment/aws-serverless.md](docs/deployment/aws-serverless.md) |
+| Scraper/Actor API guide | [docs/scraper-api-guide.md](docs/scraper-api-guide.md) |
 | Roadmap | [docs/roadmap.md](docs/roadmap.md) |
-| Lever integration | [docs/integrations/lever.md](docs/integrations/lever.md) |
-| Deployment troubleshooting | [docs/deployment/troubleshooting-lambda.md](docs/deployment/troubleshooting-lambda.md) |
 | AI agent guidelines | [AGENT.md](AGENT.md) |
 
 ---
@@ -102,11 +103,14 @@ JobApplicationTracker/
 | Component | Status |
 |---|---|
 | Frontend (Vercel) | ✅ Live |
-| Lambda Function | ✅ Active |
+| Lambda + API Gateway | ✅ CloudFormation stack |
+| ECS Worker (min=0) | ✅ Auto-scales on SQS depth |
+| SQS + DLQ | ✅ 3 retries, 14-day retention |
+| EventBridge Scheduler | ✅ Daily 8 AM EST |
 | PostgreSQL (RDS) | ✅ Ready |
 | S3 Storage | ✅ Available |
-| EventBridge Scheduler | ✅ Daily 8 AM EST |
-| Function URL / API Gateway | ⚠️ Needs IAM permissions — see [deployment guide](docs/deployment/phase4-guide.md) |
+| Bedrock (Haiku + Sonnet) | ✅ Auto-enabled |
+| Budget Alert ($30/mo) | ✅ Active |
 
 ---
 
