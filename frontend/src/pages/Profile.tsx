@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Save, Plus, Trash2, Loader2, CheckCircle, FileText, Clock } from 'lucide-react'
-import { getProfile, updateProfile, Profile, getDocuments, deleteDocument } from '../api/client'
+import { getProfile, updateProfile, Profile, getDocuments, deleteDocument, extractProfileFromResume } from '../api/client'
 import { DocumentUpload } from '../components/DocumentUpload'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -245,13 +245,17 @@ export function ProfilePage() {
         </p>
       </div>
 
-      {/* Base resume upload */}
+      {/* Base resume upload — extracts profile data */}
       <div className="card p-5 space-y-4">
         <h3 className="font-semibold text-gray-800">Base Resume</h3>
         <p className="text-sm text-gray-600">
-          Upload your master resume PDF. AI will use it as the foundation for all tailored versions.
+          Upload your master resume PDF. AI will extract your profile info and use it for tailoring.
         </p>
-        <DocumentUpload docType="resume" label="Base Resume" />
+        <ResumeExtractUpload onExtracted={(extracted) => {
+          setForm(f => ({ ...f, ...extracted }))
+          qc.invalidateQueries({ queryKey: ['profile'] })
+          qc.invalidateQueries({ queryKey: ['documents'] })
+        }} />
         <div className="space-y-2">
           {baseResumes.map(doc => <DocRow key={doc.id} doc={doc} onDelete={() => deleteMut.mutate(doc.id)} />)}
           {baseResumes.length === 0 && (
@@ -314,6 +318,83 @@ function DocRow({ doc, onDelete }: { doc: { id: number; filename: string; type: 
       >
         <Trash2 size={15} />
       </button>
+    </div>
+  )
+}
+
+// ─── Resume extract upload component ─────────────────────────────────────────
+
+import { useCallback } from 'react'
+import { useDropzone } from 'react-dropzone'
+import { Upload, AlertCircle } from 'lucide-react'
+
+function ResumeExtractUpload({ onExtracted }: { onExtracted: (data: Partial<Profile>) => void }) {
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const file = acceptedFiles[0]
+    if (!file) return
+    setStatus('uploading')
+    setMessage(`Extracting profile from ${file.name}…`)
+    try {
+      const result = await extractProfileFromResume(file)
+      setStatus('success')
+      setMessage(`Profile extracted from ${file.name}`)
+      onExtracted(result.extracted)
+      setTimeout(() => setStatus('idle'), 4000)
+    } catch {
+      setStatus('error')
+      setMessage('Extraction failed. Please try again.')
+      setTimeout(() => setStatus('idle'), 4000)
+    }
+  }, [onExtracted])
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'application/pdf': ['.pdf'] },
+    maxFiles: 1,
+    disabled: status === 'uploading',
+  })
+
+  return (
+    <div
+      {...getRootProps()}
+      className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+        isDragActive
+          ? 'border-brand-500 bg-brand-50'
+          : status === 'success'
+          ? 'border-emerald-600 bg-emerald-50'
+          : status === 'error'
+          ? 'border-red-600 bg-red-50'
+          : 'border-parchment-300 hover:border-parchment-400 bg-parchment-100'
+      }`}
+    >
+      <input {...getInputProps()} />
+      <div className="flex flex-col items-center gap-2">
+        {status === 'success' ? (
+          <CheckCircle size={32} className="text-emerald-600" />
+        ) : status === 'error' ? (
+          <AlertCircle size={32} className="text-red-600" />
+        ) : status === 'uploading' ? (
+          <Loader2 size={32} className="text-brand-600 animate-spin" />
+        ) : (
+          <div className="relative">
+            <FileText size={32} className="text-parchment-400" />
+            <Upload size={14} className="text-brand-600 absolute -bottom-1 -right-1" />
+          </div>
+        )}
+        <div>
+          <p className="text-sm font-medium text-gray-800">
+            {status === 'idle' && !isDragActive && 'Upload Resume PDF'}
+            {status === 'idle' && isDragActive && 'Drop PDF here'}
+            {status !== 'idle' && message}
+          </p>
+          {status === 'idle' && (
+            <p className="text-xs text-gray-600 mt-0.5">PDF only · Will auto-extract your profile info</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

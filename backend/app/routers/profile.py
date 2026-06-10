@@ -72,14 +72,14 @@ async def extract_profile_from_resume(
             print(f"ERROR saving file: {type(e).__name__}: {str(e)}")
             raise HTTPException(400, f"Failed to save file: {str(e)}")
 
-        # Extract profile using BERT NER (no Cerebras needed for basic extraction)
+        # Extract profile using AI (Bedrock)
         try:
-            print(f"Parsing resume with BERT NER model...")
-            extracted = resume_extractor.parse_resume(str(file_path))
+            print(f"Parsing resume with AI...")
+            extracted = await resume_extractor.parse_resume(str(file_path))
             print(f"✓ Profile extracted successfully: {extracted.get('full_name', 'Unknown')}")
             print(f"  - Skills found: {len(extracted.get('skills', []))}")
         except Exception as e:
-            print(f"ERROR extracting profile with BERT: {type(e).__name__}: {str(e)}")
+            print(f"ERROR extracting profile: {type(e).__name__}: {str(e)}")
             raise HTTPException(400, f"Failed to extract profile: {str(e)}")
 
         # Save document record
