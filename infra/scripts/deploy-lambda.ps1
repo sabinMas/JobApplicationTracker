@@ -5,7 +5,7 @@ param(
     [switch]$SkipBuild,
     [string]$Region = "us-east-1",
     [string]$AccountId = "245091941294",
-    [string]$RepoName = "jobtracker-api-lambda",
+    [string]$RepoName = "jobtracker-api",
     [string]$FunctionName = "jobtracker-api"
 )
 
