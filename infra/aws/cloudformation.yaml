@@ -1,0 +1,435 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  JobApplicationTracker serverless stack — Lambda (FastAPI via Mangum),
+  API Gateway HTTP API, EventBridge daily schedule, SQS queue,
+  ECS worker (min=0 auto-scaling on queue depth), and budget alert.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging]
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL connection string (postgresql+asyncpg://...)
+  AllowedOrigins:
+    Type: String
+    Default: "http://localhost:5173"
+    Description: Comma-separated CORS origins
+  WorkerSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet for ECS worker tasks
+  WorkerSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group for ECS worker tasks
+  S3Bucket:
+    Type: String
+    Default: jobtracker-documents-245091941294
+  SqsQueueName:
+    Type: String
+    Default: jobtracker-scraping-tasks
+  EcsClusterName:
+    Type: String
+    Default: jobtracker-cluster
+  WorkerImageUri:
+    Type: String
+    Description: Full ECR URI for worker image (account.dkr.ecr.region.amazonaws.com/repo:tag)
+  LambdaImageUri:
+    Type: String
+    Description: Full ECR URI for Lambda image
+  BudgetAlertEmail:
+    Type: String
+    Default: mason@example.com
+    Description: Email for budget threshold alerts
+  MonthlyBudgetLimit:
+    Type: Number
+    Default: 30
+    Description: Monthly USD budget threshold
+
+Resources:
+  # ============================================================================
+  # SQS Queue (worker tasks: scraping, auto-apply, actor runs)
+  # ============================================================================
+  ScrapingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref SqsQueueName
+      VisibilityTimeout: 300
+      MessageRetentionPeriod: 1209600  # 14 days
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${SqsQueueName}-dlq"
+      MessageRetentionPeriod: 1209600
+
+  # ============================================================================
+  # Lambda Function (FastAPI API served by Mangum)
+  # ============================================================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: jobtracker-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: jobtracker-lambda-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3Bucket}"
+                  - !Sub "arn:aws:s3:::${S3Bucket}/*"
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:GetQueueUrl
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt ScrapingQueue.Arn
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "arn:aws:bedrock:us-east-1::foundation-model/*"
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:jobtracker-*"
+
+  ApiLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: jobtracker-api
+      PackageType: Image
+      Code:
+        ImageUri: !Ref LambdaImageUri
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+          DATABASE_URL: !Ref DatabaseUrl
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          SQS_QUEUE_URL: !Ref ScrapingQueue
+          S3_BUCKET: !Ref S3Bucket
+          AWS_REGION_NAME: !Ref AWS::Region
+      Architectures:
+        - x86_64
+
+  # ============================================================================
+  # API Gateway HTTP API → Lambda
+  # ============================================================================
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: jobtracker-api
+      ProtocolType: HTTP
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApiLambdaFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  HttpApiDefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "$default"
+      Target: !Sub "integrations/${HttpApiIntegration}"
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+
+  LambdaApiGatewayPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  # ============================================================================
+  # EventBridge Scheduler — daily 8 AM EST → invoke Lambda /api/scheduler/run-pipeline
+  # ============================================================================
+  PipelineScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: jobtracker-scheduler-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke-lambda
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt ApiLambdaFunction.Arn
+
+  DailyPipelineSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: jobtracker-daily-pipeline
+      Description: "Run the job discovery/scoring/apply pipeline daily at 8 AM EST"
+      ScheduleExpression: "cron(0 8 * * ? *)"
+      ScheduleExpressionTimezone: "America/New_York"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt ApiLambdaFunction.Arn
+        RoleArn: !GetAtt PipelineScheduleRole.Arn
+        Input: |
+          {
+            "httpMethod": "POST",
+            "path": "/api/scheduler/run-pipeline",
+            "requestContext": {"http": {"method": "POST", "path": "/api/scheduler/run-pipeline"}},
+            "headers": {"content-type": "application/json"},
+            "body": null,
+            "isBase64Encoded": false,
+            "rawPath": "/api/scheduler/run-pipeline",
+            "version": "2.0",
+            "routeKey": "$default"
+          }
+
+  # ============================================================================
+  # ECS Cluster + Worker Service (min=0, scales on SQS depth)
+  # ============================================================================
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref EcsClusterName
+      CapacityProviders:
+        - FARGATE_SPOT
+        - FARGATE
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: FARGATE_SPOT
+          Weight: 4
+        - CapacityProvider: FARGATE
+          Weight: 1
+
+  WorkerTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: jobtracker-worker-execution-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  WorkerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: jobtracker-worker-task-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: worker-permissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                Resource: !GetAtt ScrapingQueue.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${S3Bucket}/*"
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource: "arn:aws:bedrock:us-east-1::foundation-model/*"
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:jobtracker-*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/jobtracker-worker:*"
+
+  WorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/jobtracker-worker
+      RetentionInDays: 14
+
+  WorkerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: jobtracker-worker
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      Cpu: "1024"
+      Memory: "2048"
+      ExecutionRoleArn: !GetAtt WorkerTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt WorkerTaskRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Ref WorkerImageUri
+          Essential: true
+          Environment:
+            - Name: SQS_QUEUE_URL
+              Value: !Ref ScrapingQueue
+            - Name: DATABASE_URL
+              Value: !Ref DatabaseUrl
+            - Name: S3_BUCKET
+              Value: !Ref S3Bucket
+            - Name: ENVIRONMENT
+              Value: !Ref Environment
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WorkerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: worker
+
+  WorkerService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: worker-service
+      Cluster: !Ref EcsCluster
+      TaskDefinition: !Ref WorkerTaskDefinition
+      DesiredCount: 0
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !Ref WorkerSubnetId
+          SecurityGroups:
+            - !Ref WorkerSecurityGroupId
+
+  # Auto-scaling: min=0, max=3, triggered by SQS messages
+  WorkerScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 3
+      MinCapacity: 0
+      ResourceId: !Sub "service/${EcsClusterName}/worker-service"
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+    DependsOn: WorkerService
+
+  WorkerScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: worker-sqs-scaling
+      PolicyType: TargetTrackingScaling
+      ScalableTarget: !Ref WorkerScalableTarget
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 5
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+        CustomizedMetricSpecification:
+          MetricName: ApproximateNumberOfMessagesVisible
+          Namespace: AWS/SQS
+          Statistic: Average
+          Dimensions:
+            - Name: QueueName
+              Value: !Ref SqsQueueName
+          Unit: Count
+
+  # ============================================================================
+  # Budget Alert ($30/month)
+  # ============================================================================
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: jobtracker-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetLimit
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref BudgetAlertEmail
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref BudgetAlertEmail
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !GetAtt HttpApi.ApiEndpoint
+
+  LambdaFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt ApiLambdaFunction.Arn
+
+  SqsQueueUrl:
+    Description: SQS queue URL for worker tasks
+    Value: !Ref ScrapingQueue
+
+  SqsQueueArn:
+    Description: SQS queue ARN
+    Value: !GetAtt ScrapingQueue.Arn
+
+  EcsClusterArn:
+    Description: ECS cluster ARN
+    Value: !GetAtt EcsCluster.Arn
