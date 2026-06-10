@@ -4,7 +4,7 @@ param(
     [string]$ClusterName = "jobtracker-cluster",
     [string]$ServiceName = "worker-service",
     [string]$QueueName = "jobtracker-scraper-runs",
-    [int]$MinTasks = 1,
+    [int]$MinTasks = 0,
     [int]$MaxTasks = 5,
     [double]$TargetQueueDepth = 10,
     [string]$Region = "us-east-1"
