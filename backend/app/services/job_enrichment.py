@@ -123,14 +123,11 @@ async def on_scraper_complete(
 
 
 def _get_actor_for_source(source: str) -> Optional[str]:
-    """Map job source to scraper actor name."""
+    """Map job source to scraper actor name. Sources without a dedicated
+    scraper fall through to the MCP-driven agentic actor."""
     mapping = {
         "linkedin": "linkedin",
         "indeed": "indeed",
         "github": "github",
-        "greenhouse": "linkedin",  # Fallback to LinkedIn
-        "lever": "linkedin",
-        "angellist": "angellist",
-        "rss": "linkedin",
     }
-    return mapping.get(source.lower())
+    return mapping.get((source or "").lower(), "agentic")

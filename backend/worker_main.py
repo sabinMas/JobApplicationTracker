@@ -45,6 +45,18 @@ from app.services.playwright_service import PlaywrightService
 from app.services.ai_service import extract_job
 from app.services.actor_framework import actor_registry
 from app.services.actor_runner import execute_actor_run
+from app.scrapers.test_actor import TestActor
+from app.scrapers.linkedin_actor import LinkedInActor
+from app.scrapers.indeed_actor import IndeedActor
+from app.scrapers.github_actor import GitHubActor
+from app.scrapers.agentic_actor import AgenticScraperActor
+
+
+def _register_actors() -> None:
+    """Actors must be registered in this process — the API's registry doesn't
+    carry over to the worker."""
+    for actor in (TestActor(), LinkedInActor(), IndeedActor(), GitHubActor(), AgenticScraperActor()):
+        actor_registry.register(actor)
 
 
 async def process_scraping_task(task: dict, db: AsyncSession) -> bool:
@@ -249,6 +261,7 @@ async def poll_sqs_queue():
 def main():
     """Entry point for ECS worker."""
     logger.info("Starting ECS Fargate worker")
+    _register_actors()
     asyncio.run(poll_sqs_queue())
 
 

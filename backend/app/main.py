@@ -18,6 +18,7 @@ from .scrapers.test_actor import TestActor
 from .scrapers.linkedin_actor import LinkedInActor
 from .scrapers.indeed_actor import IndeedActor
 from .scrapers.github_actor import GitHubActor
+from .scrapers.agentic_actor import AgenticScraperActor
 
 # Initialize structured logging
 setup_logging(os.getenv("ENVIRONMENT", "development"))
@@ -34,6 +35,7 @@ def _init_actors():
         actor_registry.register(LinkedInActor())
         actor_registry.register(IndeedActor())
         actor_registry.register(GitHubActor())
+        actor_registry.register(AgenticScraperActor())
         logger.info("Actors initialized successfully")
     except Exception as e:
         logger.error(f"Actor init error: {e}", extra_fields={"error": str(e)})
