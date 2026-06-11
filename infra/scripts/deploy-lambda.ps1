@@ -26,20 +26,19 @@ if ($LASTEXITCODE -ne 0) {
 $ErrorActionPreference = "Stop"
 
 if (-not $SkipBuild) {
-    # Build image
-    Write-Host "[2/4] Building Docker image..." -ForegroundColor Yellow
-    docker build -f Dockerfile.lambda -t $RepoName .
-    if ($LASTEXITCODE -ne 0) { throw "Docker build failed" }
-
-    # Push to ECR
-    Write-Host "[3/4] Pushing to ECR..." -ForegroundColor Yellow
+    # Login to ECR first (buildx pushes during build)
+    Write-Host "[2/4] Logging in to ECR..." -ForegroundColor Yellow
     $loginCmd = "aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $EcrUri"
     cmd /c $loginCmd
     if ($LASTEXITCODE -ne 0) { throw "ECR login failed" }
 
-    docker tag $RepoName "${ImageUri}"
-    docker push "${ImageUri}"
-    if ($LASTEXITCODE -ne 0) { throw "Docker push failed" }
+    # Build and push. Lambda requires a plain single-arch manifest:
+    # --provenance=false --sbom=false strips the OCI attestation manifests
+    # that newer buildx adds, which Lambda rejects as "media type not supported".
+    Write-Host "[3/4] Building and pushing image..." -ForegroundColor Yellow
+    docker buildx build --provenance=false --sbom=false --platform linux/amd64 `
+        -f Dockerfile.lambda -t "${ImageUri}" --push .
+    if ($LASTEXITCODE -ne 0) { throw "Docker build/push failed" }
 } else {
     Write-Host "[2-3/4] Skipping build (--SkipBuild)" -ForegroundColor Gray
 }
