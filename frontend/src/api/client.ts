@@ -144,7 +144,12 @@ export const updateProfile = (data: Partial<Profile>) =>
 export const extractProfileFromResume = (file: File) => {
   const form = new FormData()
   form.append('file', file)
-  return api.post<{ extracted: Profile; document_id: number }>('/profile/extract', form, {
+  return api.post<{
+    extracted: Profile
+    merged: Profile | null
+    document_id: number
+    changes: string[]
+  }>('/profile/extract', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then(r => r.data)
 }

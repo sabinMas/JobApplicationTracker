@@ -65,13 +65,13 @@ export function ProfilePage() {
       {profile && (profile.skills?.length || profile.experience?.length || profile.full_name) ? (
         <div className="card p-5 bg-emerald-50 border-emerald-300">
           <p className="text-sm text-emerald-900">
-            ✅ Your profile was extracted from your resume. Edit any fields below and click Save to update.
+            ✅ Your profile is ready. Upload a new resume below to auto-extract and merge updated information. Edit any fields and click Save.
           </p>
         </div>
       ) : (
         <div className="card p-5 bg-amber-50 border-amber-300">
           <p className="text-sm text-amber-900">
-            📝 Fill in your profile below, or upload a resume at the bottom of this page to auto-extract your info.
+            📝 Fill in your profile below, or upload a resume at the bottom to auto-extract your info. Claude will intelligently merge new data while preserving any manual entries.
           </p>
         </div>
       )}
@@ -331,6 +331,8 @@ import { Upload, AlertCircle } from 'lucide-react'
 function ResumeExtractUpload({ onExtracted }: { onExtracted: (data: Partial<Profile>) => void }) {
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
+  const [changes, setChanges] = useState<string[]>([])
+  const [extractedCount, setExtractedCount] = useState(0)
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -341,17 +343,33 @@ function ResumeExtractUpload({ onExtracted }: { onExtracted: (data: Partial<Prof
       const result = await extractProfileFromResume(file)
       if (result.extracted && Object.keys(result.extracted).length > 0) {
         setStatus('success')
-        setMessage(`Profile extracted from ${file.name}`)
-        onExtracted(result.extracted)
+        setChanges(result.changes)
+        setExtractedCount(Object.keys(result.extracted).length)
+
+        // Use merged profile if available, otherwise extracted
+        const profileToApply = result.merged || result.extracted
+
+        if (result.changes.length > 0) {
+          // Format changes for display (convert snake_case to Title Case)
+          const formattedChanges = result.changes.map(field =>
+            field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+          )
+          setMessage(`✅ Profile auto-saved! Updated: ${formattedChanges.join(', ')}`)
+        } else {
+          setMessage(`Resume uploaded. Profile merged.`)
+        }
+        onExtracted(profileToApply)
       } else {
         setStatus('success')
         setMessage(`Resume uploaded. No data could be auto-extracted — please fill in below.`)
+        setChanges([])
         onExtracted({})
       }
-      setTimeout(() => setStatus('idle'), 4000)
+      setTimeout(() => setStatus('idle'), 5000)
     } catch (error) {
       setStatus('error')
       setMessage('Upload failed. Check file format and try again.')
+      setChanges([])
       setTimeout(() => setStatus('idle'), 4000)
     }
   }, [onExtracted])
@@ -364,43 +382,75 @@ function ResumeExtractUpload({ onExtracted }: { onExtracted: (data: Partial<Prof
   })
 
   return (
-    <div
-      {...getRootProps()}
-      className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
-        isDragActive
-          ? 'border-brand-500 bg-brand-50'
-          : status === 'success'
-          ? 'border-emerald-600 bg-emerald-50'
-          : status === 'error'
-          ? 'border-red-600 bg-red-50'
-          : 'border-parchment-300 hover:border-parchment-400 bg-parchment-100'
-      }`}
-    >
-      <input {...getInputProps()} />
-      <div className="flex flex-col items-center gap-2">
-        {status === 'success' ? (
-          <CheckCircle size={32} className="text-emerald-600" />
-        ) : status === 'error' ? (
-          <AlertCircle size={32} className="text-red-600" />
-        ) : status === 'uploading' ? (
-          <Loader2 size={32} className="text-brand-600 animate-spin" />
-        ) : (
-          <div className="relative">
-            <FileText size={32} className="text-parchment-400" />
-            <Upload size={14} className="text-brand-600 absolute -bottom-1 -right-1" />
-          </div>
-        )}
-        <div>
-          <p className="text-sm font-medium text-gray-800">
-            {status === 'idle' && !isDragActive && 'Upload Resume PDF'}
-            {status === 'idle' && isDragActive && 'Drop PDF here'}
-            {status !== 'idle' && message}
-          </p>
-          {status === 'idle' && (
-            <p className="text-xs text-gray-600 mt-0.5">PDF only · Will auto-extract your profile info</p>
+    <div className="space-y-3">
+      <div
+        {...getRootProps()}
+        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+          isDragActive
+            ? 'border-brand-500 bg-brand-50'
+            : status === 'success'
+            ? 'border-emerald-600 bg-emerald-50'
+            : status === 'error'
+            ? 'border-red-600 bg-red-50'
+            : 'border-parchment-300 hover:border-parchment-400 bg-parchment-100'
+        }`}
+      >
+        <input {...getInputProps()} />
+        <div className="flex flex-col items-center gap-2">
+          {status === 'success' ? (
+            <CheckCircle size={32} className="text-emerald-600" />
+          ) : status === 'error' ? (
+            <AlertCircle size={32} className="text-red-600" />
+          ) : status === 'uploading' ? (
+            <Loader2 size={32} className="text-brand-600 animate-spin" />
+          ) : (
+            <div className="relative">
+              <FileText size={32} className="text-parchment-400" />
+              <Upload size={14} className="text-brand-600 absolute -bottom-1 -right-1" />
+            </div>
           )}
+          <div>
+            <p className="text-sm font-medium text-gray-800">
+              {status === 'idle' && !isDragActive && 'Upload Resume PDF'}
+              {status === 'idle' && isDragActive && 'Drop PDF here'}
+              {status !== 'idle' && message}
+            </p>
+            {status === 'idle' && (
+              <p className="text-xs text-gray-600 mt-0.5">PDF only · Will auto-extract and merge your profile info</p>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Changes feedback card */}
+      {status === 'success' && changes.length > 0 && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-emerald-900">
+              ✨ Profile Auto-Updated ({changes.length} field{changes.length !== 1 ? 's' : ''})
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {changes.map(field => (
+                <span key={field} className="text-xs bg-emerald-200 text-emerald-800 rounded px-2 py-1">
+                  {field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-emerald-700 mt-2">
+              Fields were intelligently merged: new data added where empty, manual entries preserved.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* No changes feedback card */}
+      {status === 'success' && extractedCount > 0 && changes.length === 0 && (
+        <div className="bg-blue-50 border border-blue-300 rounded-lg p-4">
+          <p className="text-sm text-blue-900">
+            ℹ️ Profile data extracted but not changed (you already have this info filled in).
+          </p>
+        </div>
+      )}
     </div>
   )
 }

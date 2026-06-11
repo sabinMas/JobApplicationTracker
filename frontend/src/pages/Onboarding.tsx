@@ -18,13 +18,17 @@ export function Onboarding() {
   const [extractedProfile, setExtractedProfile] = useState<Profile | null>(null)
   const [editingProfile, setEditingProfile] = useState<Profile>(profile ?? {})
   const [error, setError] = useState('')
+  const [changes, setChanges] = useState<string[]>([])
 
   const extractMutation = useMutation({
     mutationFn: (file: File) => extractProfileFromResume(file),
     onSuccess: (data) => {
       setError('')
-      setExtractedProfile(data.extracted)
-      setEditingProfile(data.extracted)
+      setChanges(data.changes)
+      // Use merged profile if available (which includes auto-saved updates), otherwise extracted
+      const profileToUse = data.merged || data.extracted
+      setExtractedProfile(profileToUse)
+      setEditingProfile(profileToUse)
     },
     onError: () => {
       setError('Failed to extract profile. Try a different resume.')
@@ -72,7 +76,7 @@ export function Onboarding() {
             <Upload size={28} className="text-brand-700" />
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome! Let's Get Started</h1>
-          <p className="text-gray-600">Upload your resume and we'll AI-extract your profile in seconds</p>
+          <p className="text-gray-600">Upload your resume and Claude will AI-extract and auto-save your profile in seconds</p>
         </div>
 
         <div className="card p-8 space-y-6">
@@ -135,8 +139,24 @@ export function Onboarding() {
             <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <CheckCircle size={20} className="text-emerald-700" />
-                <span className="text-emerald-800 font-medium">Profile Extracted!</span>
+                <span className="text-emerald-800 font-medium">
+                  {changes.length > 0 ? '✨ Profile Auto-Saved!' : 'Profile Extracted!'}
+                </span>
               </div>
+
+              {changes.length > 0 && (
+                <div className="bg-white rounded p-3 space-y-2">
+                  <p className="text-sm text-gray-700 font-medium">Updated fields:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {changes.map(field => (
+                      <span key={field} className="text-xs bg-emerald-200 text-emerald-800 rounded px-2 py-1">
+                        {field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-gray-600">Name:</span>
