@@ -1,8 +1,8 @@
 """
 Provider-routing AI layer.
 
-Primary provider: AWS Bedrock (Claude) via the async Converse API — paid with
-AWS credits, IAM-authenticated, no API key to manage.
+Primary provider: AWS Bedrock (Amazon Nova) via the async Converse API — paid
+with AWS credits, IAM-authenticated, no API key and no use-case form needed.
 Fallback provider: Cerebras (OpenAI-compatible endpoint).
 
 Routing is controlled by the AI_PROVIDER env var ("bedrock" | "cerebras",
@@ -10,8 +10,8 @@ default "bedrock"). If the primary provider fails, the call falls back to the
 other provider automatically.
 
 Two model tiers:
-- FAST  (extraction, scoring, field mapping): Claude Haiku 4.5
-- SMART (resume tailoring, cover letters):    Claude Sonnet 4.6
+- FAST  (extraction, scoring, field mapping): Amazon Nova Lite
+- SMART (resume tailoring, cover letters):    Amazon Nova Pro
 
 All high-level AI functions used across the app live here. Service modules
 should import from `ai_service`, not from `cerebras_service`.
@@ -31,12 +31,12 @@ logger = logging.getLogger(__name__)
 AI_PROVIDER = os.getenv("AI_PROVIDER", "bedrock")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
-# Cross-region inference profile IDs (the "us." prefix) — required for
-# on-demand invocation of newer Claude models on Bedrock.
-BEDROCK_FAST_MODEL = os.getenv(
-    "BEDROCK_FAST_MODEL", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-)
-BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "us.anthropic.claude-sonnet-4-6")
+# Amazon Nova models — available without the Anthropic use-case form and
+# support forced tool-use (structured output) via the Converse API.
+# FAST  (extraction, scoring, field mapping): Nova Lite
+# SMART (resume tailoring, cover letters):    Nova Pro
+BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "amazon.nova-lite-v1:0")
+BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "amazon.nova-pro-v1:0")
 
 _session = aioboto3.Session()
 
