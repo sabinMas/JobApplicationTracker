@@ -6,7 +6,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '../api/dashboard';
 import { getProfile } from '../api/client';
-import { AlertCircle, CheckCircle2, ClipboardList, Zap } from 'lucide-react';
+import { AlertCircle, Zap } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const { data: metrics, isLoading } = useQuery({

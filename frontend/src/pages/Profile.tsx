@@ -331,7 +331,6 @@ import { Upload, AlertCircle } from 'lucide-react'
 function ResumeExtractUpload({ onExtracted }: { onExtracted: (data: Partial<Profile>) => void }) {
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
-  const [showHelp, setShowHelp] = useState(false)
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
