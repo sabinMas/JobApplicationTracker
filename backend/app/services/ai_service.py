@@ -31,12 +31,14 @@ logger = logging.getLogger(__name__)
 AI_PROVIDER = os.getenv("AI_PROVIDER", "bedrock")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
-# Amazon Nova models — available without the Anthropic use-case form and
-# support forced tool-use (structured output) via the Converse API.
-# FAST  (extraction, scoring, field mapping): Nova Lite
-# SMART (resume tailoring, cover letters):    Nova Pro
+# Amazon Nova models — NO gate required, available immediately
+# Support forced tool-use (structured output) via Bedrock Converse API
+# FAST  (extraction, scoring, field mapping): Nova Lite (~faster, cheaper)
+# SMART (resume tailoring, cover letters):    Nova Pro (~higher quality)
 BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "amazon.nova-lite-v1:0")
 BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "amazon.nova-pro-v1:0")
+
+logger.info(f"AI Provider: {AI_PROVIDER.upper()} | Fast: {BEDROCK_FAST_MODEL} | Smart: {BEDROCK_SMART_MODEL}")
 
 _session = aioboto3.Session()
 
@@ -50,9 +52,8 @@ async def _bedrock_chat(
     tool_schema: Optional[dict] = None,
     tool_name: str = "structured_output",
 ) -> str | dict:
-    """Call Bedrock Converse. If tool_schema is given, force the model to call
-    a tool with that JSON schema and return the parsed dict; otherwise return
-    the text response."""
+    """Call Bedrock Converse (Amazon Nova models — no gate required).
+    If tool_schema given, force structured output; otherwise return text."""
     kwargs: dict[str, Any] = {
         "modelId": model_id,
         "system": [{"text": system}],
@@ -73,16 +74,25 @@ async def _bedrock_chat(
             "toolChoice": {"tool": {"name": tool_name}},
         }
 
-    async with _session.client("bedrock-runtime", region_name=AWS_REGION) as client:
-        response = await client.converse(**kwargs)
+    logger.debug(f"Calling Bedrock Converse: model={model_id}, structured={tool_schema is not None}")
+    try:
+        async with _session.client("bedrock-runtime", region_name=AWS_REGION) as client:
+            response = await client.converse(**kwargs)
+    except Exception as e:
+        logger.error(f"Bedrock API error: {type(e).__name__}: {str(e)[:200]}")
+        raise
 
     content = response["output"]["message"]["content"]
     if tool_schema is not None:
         for block in content:
             if "toolUse" in block:
+                logger.debug(f"Bedrock returned structured output successfully")
                 return block["toolUse"]["input"]
         raise ValueError("Bedrock response contained no toolUse block")
-    return "".join(block.get("text", "") for block in content).strip()
+
+    text_response = "".join(block.get("text", "") for block in content).strip()
+    logger.debug(f"Bedrock returned text response ({len(text_response)} chars)")
+    return text_response
 
 
 def _parse_json_text(result: str) -> dict:
