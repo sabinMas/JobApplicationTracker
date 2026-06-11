@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_CALLS = 15
 ACTION_DELAY_SECONDS = 0.4
-MODEL_ID = os.getenv("BEDROCK_FAST_MODEL", "amazon.nova-lite-v1:0")
+MODEL_ID = os.getenv("BEDROCK_FAST_MODEL", "anthropic.claude-3-haiku-20240307-v1:0")
 
 
 class ScrapedJob(BaseModel):

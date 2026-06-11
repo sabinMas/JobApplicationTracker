@@ -13,7 +13,7 @@ from ..schemas import (
     SearchPreferencesUpdate,
     SearchPreferencesOut,
 )
-from ..services import ai_service, pdf_service, resume_extractor
+from ..services import ai_service, pdf_service, resume_extractor, profile_service
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
@@ -54,7 +54,7 @@ async def extract_profile_from_resume(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Upload a PDF resume → BERT NER extracts structured profile → returns for review."""
+    """Upload a PDF resume → Claude extracts structured profile → auto-merge into profile."""
     try:
         if not file.filename.endswith(".pdf"):
             raise HTTPException(400, "Only PDF files are supported.")
@@ -72,9 +72,9 @@ async def extract_profile_from_resume(
             print(f"ERROR saving file: {type(e).__name__}: {str(e)}")
             raise HTTPException(400, f"Failed to save file: {str(e)}")
 
-        # Extract profile using AI (Bedrock or Cerebras)
+        # Extract profile using AI (Claude via Bedrock or Cerebras)
         try:
-            print(f"[EXTRACT] Parsing resume with AI...")
+            print(f"[EXTRACT] Parsing resume with Claude...")
             extracted = await resume_extractor.parse_resume(str(file_path))
             if not extracted:
                 print(f"[EXTRACT] ⚠️  AI returned empty profile - user can fill in manually")
@@ -87,6 +87,26 @@ async def extract_profile_from_resume(
             print(f"[EXTRACT] ✗ AI extraction failed: {type(e).__name__}: {str(e)}")
             print(f"[EXTRACT] Continuing with empty profile - user can fill in manually")
             extracted = {}
+
+        # Merge extracted data with existing profile
+        try:
+            result = await db.execute(select(Profile))
+            profile = result.scalar_one_or_none()
+            if not profile:
+                profile = Profile(id=1)
+                db.add(profile)
+                await db.flush()  # Get the profile in the session
+
+            print(f"[MERGE] Merging extracted data into existing profile...")
+            merged_profile, changed_fields = await profile_service.merge_extracted_profile(profile, extracted)
+            await db.commit()
+            await db.refresh(merged_profile)
+            print(f"[MERGE] ✓ Profile merged: {len(changed_fields)} fields updated: {changed_fields}")
+        except Exception as e:
+            print(f"[MERGE] ✗ Profile merge failed: {type(e).__name__}: {str(e)}")
+            print(f"[MERGE] Continuing - extracted data will be returned for manual review")
+            merged_profile = None
+            changed_fields = []
 
         # Save document record
         try:
@@ -106,7 +126,12 @@ async def extract_profile_from_resume(
             print(f"ERROR saving document to DB: {type(e).__name__}: {str(e)}")
             raise HTTPException(500, f"Failed to save document: {str(e)}")
 
-        return {"extracted": extracted, "document_id": doc.id}
+        return {
+            "extracted": extracted,
+            "merged": merged_profile if merged_profile else None,
+            "document_id": doc.id,
+            "changes": changed_fields,
+        }
     except HTTPException:
         raise
     except Exception as e:

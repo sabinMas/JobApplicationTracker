@@ -1,7 +1,7 @@
 """
 Provider-routing AI layer.
 
-Primary provider: AWS Bedrock (Amazon Nova) via the async Converse API — paid
+Primary provider: AWS Bedrock (Claude) via the async Converse API — paid
 with AWS credits, IAM-authenticated, no API key and no use-case form needed.
 Fallback provider: Cerebras (OpenAI-compatible endpoint).
 
@@ -9,9 +9,9 @@ Routing is controlled by the AI_PROVIDER env var ("bedrock" | "cerebras",
 default "bedrock"). If the primary provider fails, the call falls back to the
 other provider automatically.
 
-Two model tiers:
-- FAST  (extraction, scoring, field mapping): Amazon Nova Lite
-- SMART (resume tailoring, cover letters):    Amazon Nova Pro
+Two model tiers for cost optimization:
+- FAST  (extraction, scoring, field mapping): Claude 3 Haiku (fastest, cheapest)
+- SMART (resume tailoring, cover letters):    Claude 3.5 Sonnet (highest quality)
 
 All high-level AI functions used across the app live here. Service modules
 should import from `ai_service`, not from `cerebras_service`.
@@ -31,12 +31,13 @@ logger = logging.getLogger(__name__)
 AI_PROVIDER = os.getenv("AI_PROVIDER", "bedrock")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
-# Amazon Nova models — NO gate required, available immediately
+# Claude models via AWS Bedrock — NO gate required, use your AWS credentials
 # Support forced tool-use (structured output) via Bedrock Converse API
-# FAST  (extraction, scoring, field mapping): Nova Lite (~faster, cheaper)
-# SMART (resume tailoring, cover letters):    Nova Pro (~higher quality)
-BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "amazon.nova-lite-v1:0")
-BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "amazon.nova-pro-v1:0")
+# Two-tier approach for cost optimization:
+# FAST  (extraction, scoring, field mapping): Claude 3 Haiku (~fastest, cheapest)
+# SMART (resume tailoring, cover letters):    Claude 3.5 Sonnet (~highest quality)
+BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "anthropic.claude-3-haiku-20240307-v1:0")
+BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "anthropic.claude-3-5-sonnet-20241022-v2:0")
 
 logger.info(f"AI Provider: {AI_PROVIDER.upper()} | Fast: {BEDROCK_FAST_MODEL} | Smart: {BEDROCK_SMART_MODEL}")
 

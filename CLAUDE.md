@@ -83,6 +83,7 @@ JobApplicationTracker/
 │   │   │   ├── profile.py               # Profile CRUD + PDF extraction
 │   │   │   └── scheduler.py             # Bulk auto-apply scheduling
 │   │   └── services/
+│   │       ├── ai_service.py            # Provider-routed AI layer (Bedrock + fallback)
 │   │       ├── ats_integration.py       # ATS URL detection + platform routing
 │   │       ├── ats_routers/
 │   │       │   ├── base.py              # Abstract ATS router interface
@@ -92,7 +93,8 @@ JobApplicationTracker/
 │   │       ├── auto_apply_with_scoring.py # Score check before apply
 │   │       ├── auto_scheduler.py        # Scheduled bulk application runner
 │   │       ├── auto_submit.py           # Form detection, field mapping, submission
-│   │       ├── cerebras_service.py      # All Cerebras AI calls (extraction + tailoring)
+│   │       ├── cerebras_service.py      # Cerebras fallback (OpenAI-compatible endpoint)
+│   │       ├── profile_service.py       # Profile merge logic for resume extraction
 │   │       ├── job_scorer.py            # AgentCore job scoring (1–10)
 │   │       ├── job_sources/
 │   │       │   ├── base.py              # Abstract job source
@@ -153,7 +155,8 @@ JobApplicationTracker/
 | ORM | SQLAlchemy (async) | 2.0.36 | Never use sync Session |
 | Validation | Pydantic | 2.10.3 | All request/response schemas |
 | Browser automation | Playwright | 1.49.0 | Chromium, headed in dev |
-| AI model | Cerebras `llama-3.3-70b` | via OpenAI SDK | Fast + cheap |
+| AI model (primary) | Claude 3 Haiku / Sonnet | via AWS Bedrock | Two-tier: Haiku for extraction, Sonnet for tailoring |
+| AI model (fallback) | Cerebras `llama-3.3-70b` | via OpenAI SDK | Optional fallback if Bedrock unavailable |
 | PDF extraction | pdfplumber | 0.11.4 | Resume text extraction |
 | PDF generation | ReportLab | 4.2.5 | Tailored resume output |
 | HTTP client | httpx | 0.28.0 | Async, never `requests` |
@@ -227,25 +230,37 @@ Tracks every submission attempt for analytics — timing, status, ATS platform, 
 
 ## 6. Core Workflows
 
-### 6.1 Job Discovery
+### 6.1 Profile Extraction from Resume
+```
+POST /api/profile/extract  { PDF resume file }
+  → resume_extractor.parse_resume(file_path)
+      → extract_text_from_pdf(path) with pdfplumber
+      → ai_service.extract_profile(text) via Claude Haiku
+  → profile_service.merge_extracted_profile(existing, extracted)
+      → Intelligent merge: preserve manual entries, add new data
+  → Profile(id=1) updated in DB
+  → Return { extracted, merged, document_id, changes }
+```
+
+### 6.2 Job Discovery
 ```
 EventBridge (daily 8 AM) OR POST /api/scheduler/apply-now
   → job_sync_scheduler.py → job_sources/{linkedin,github,angellist,rss}_source.py
   → scraper_service.py (BeautifulSoup)
-  → cerebras_service.extract_job(page_text) → Job record created, status="discovered"
-  → job_scorer.py → score 1–10 written to Job
+  → ai_service.extract_job(page_text) via Claude Haiku → Job record created, status="discovered"
+  → job_scorer.py → ai_service.structured() → score 1–10 written to Job
 ```
 
-### 6.2 Resume Tailoring
+### 6.3 Resume Tailoring
 ```
 POST /api/ai/tailor-resume  { job_id }
-  → cerebras_service.tailor_resume(job_desc, requirements, base_resume, profile)
+  → ai_service.tailor_resume(job_desc, requirements, base_resume, profile) via Claude 3.5 Sonnet
   → temperature=0.5, structured markdown output
   → Document(type=resume, variant=tailored, job_id=X) saved to data/generated/
   → Application.tailored_resume_id updated
 ```
 
-### 6.3 Full Auto-Apply  ← The most important flow
+### 6.4 Full Auto-Apply  ← The most important flow
 ```
 POST /api/auto-apply/full/{application_id}
   1. Verify tailored_resume_id is set — abort if missing
@@ -255,7 +270,7 @@ POST /api/auto-apply/full/{application_id}
   5. ats_routers/{greenhouse,lever,form_fallback}.submit(job, profile, page)
        Form fallback path:
          auto_submit.detect_and_fill_required_fields(page, profile)
-         → Extract labels → cerebras_service.map_form_fields() → fill each field
+         → Extract labels → ai_service.map_form_fields() via Claude Haiku → fill each field
          → 200ms delay between fields
          → upload_documents(resume_path, cover_letter_path)
          → find_and_click_submit()
@@ -265,7 +280,7 @@ POST /api/auto-apply/full/{application_id}
   8. Return { status: "success|submitted_unverified|pending_submission|error" }
 ```
 
-### 6.4 Retry Logic
+### 6.5 Retry Logic
 `retry_service.py` implements exponential backoff: 1s → 4s → 16s → 64s, max 3 attempts. On each retry, ATS detection reruns in case the URL changed. Tracked via `retry_count`, `error_history[]` on Application.
 
 ---
@@ -278,7 +293,9 @@ Full reference: [docs/api/reference.md](docs/api/reference.md)
 |---|---|---|
 | `GET` | `/api/profile` | Get user profile |
 | `PUT` | `/api/profile` | Update profile |
-| `POST` | `/api/profile/extract` | Extract profile from resume PDF |
+| `POST` | `/api/profile/extract` | Extract profile from resume PDF + auto-merge into profile |
+| `GET` | `/api/profile/preferences` | Get job search preferences |
+| `POST` | `/api/profile/preferences/seed` | AI-propose preferences from profile |
 | `GET` | `/api/jobs` | List jobs (supports `?status=discovered`) |
 | `POST` | `/api/jobs/scrape` | Scrape job from URL |
 | `GET` | `/api/jobs/greenhouse/{slug}` | Browse a company's Greenhouse board |
@@ -323,14 +340,24 @@ WebSocket event shape:
 
 ### Environment Variables
 ```
-# Required
-CEREBRAS_API_KEY=your-key
+# AWS (required for primary AI provider via Bedrock)
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_key_here
+AWS_SECRET_ACCESS_KEY=your_secret_here
 
-# Optional — defaults shown
+# AI Models (optional — defaults use Claude Haiku + Sonnet)
+# BEDROCK_FAST_MODEL=anthropic.claude-3-haiku-20240307-v1:0
+# BEDROCK_SMART_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
+
+# Fallback AI (optional — only needed if Bedrock unavailable)
+# CEREBRAS_API_KEY=your_key_here
+
+# Database
 DATABASE_URL=sqlite+aiosqlite:///../data/app.db
+
+# API & Storage
 ALLOWED_ORIGINS=http://localhost:5173
 ENVIRONMENT=development
-AWS_REGION=us-east-1
 S3_BUCKET_NAME=jobtracker-documents-245091941294
 ```
 
