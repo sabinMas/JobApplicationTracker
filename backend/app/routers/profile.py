@@ -72,15 +72,21 @@ async def extract_profile_from_resume(
             print(f"ERROR saving file: {type(e).__name__}: {str(e)}")
             raise HTTPException(400, f"Failed to save file: {str(e)}")
 
-        # Extract profile using AI (Bedrock)
+        # Extract profile using AI (Bedrock or Cerebras)
         try:
-            print(f"Parsing resume with AI...")
+            print(f"[EXTRACT] Parsing resume with AI...")
             extracted = await resume_extractor.parse_resume(str(file_path))
-            print(f"✓ Profile extracted successfully: {extracted.get('full_name', 'Unknown')}")
-            print(f"  - Skills found: {len(extracted.get('skills', []))}")
+            if not extracted:
+                print(f"[EXTRACT] ⚠️  AI returned empty profile - user can fill in manually")
+            else:
+                print(f"[EXTRACT] ✓ Profile extracted: {extracted.get('full_name', 'Unknown')}")
+                print(f"[EXTRACT]   - Skills: {len(extracted.get('skills', []))} found")
+                print(f"[EXTRACT]   - Experience: {len(extracted.get('experience', []))} entries")
+                print(f"[EXTRACT]   - Education: {len(extracted.get('education', []))} entries")
         except Exception as e:
-            print(f"ERROR extracting profile: {type(e).__name__}: {str(e)}")
-            raise HTTPException(400, f"Failed to extract profile: {str(e)}")
+            print(f"[EXTRACT] ✗ AI extraction failed: {type(e).__name__}: {str(e)}")
+            print(f"[EXTRACT] Continuing with empty profile - user can fill in manually")
+            extracted = {}
 
         # Save document record
         try:

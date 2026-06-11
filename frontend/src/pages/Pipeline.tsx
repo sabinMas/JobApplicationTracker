@@ -19,22 +19,31 @@ export function PipelinePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
+      {/* Header & Explanation */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Pipeline</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Automation Pipeline</h1>
           <p className="text-gray-600 text-sm mt-1">
-            Daily automation: discover → score → enrich → tailor → submit
+            Complete workflow: discover jobs → score matches → enrich details → prepare applications → submit
           </p>
         </div>
         <button
-          className="btn-primary flex items-center gap-2"
+          className="btn-primary flex items-center gap-2 px-6 py-3 text-base"
           onClick={() => trigger.mutate()}
           disabled={trigger.isPending}
         >
-          {trigger.isPending ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-          Run Now
+          {trigger.isPending ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+          {trigger.isPending ? 'Running...' : 'Run Now'}
         </button>
+      </div>
+
+      {/* Info Card */}
+      <div className="card p-5 bg-blue-50 border-blue-300">
+        <p className="text-sm text-blue-900">
+          <strong>What happens:</strong> AI discovers jobs matching your preferences, scores them 1-10,
+          enriches details with AI analysis, prepares tailored documents, and auto-submits high-scoring applications.
+          Monitor progress below.
+        </p>
       </div>
 
       {/* Latest Run Summary */}

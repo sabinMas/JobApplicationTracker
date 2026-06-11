@@ -331,6 +331,7 @@ import { Upload, AlertCircle } from 'lucide-react'
 function ResumeExtractUpload({ onExtracted }: { onExtracted: (data: Partial<Profile>) => void }) {
   const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
   const [message, setMessage] = useState('')
+  const [showHelp, setShowHelp] = useState(false)
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -339,13 +340,19 @@ function ResumeExtractUpload({ onExtracted }: { onExtracted: (data: Partial<Prof
     setMessage(`Extracting profile from ${file.name}…`)
     try {
       const result = await extractProfileFromResume(file)
-      setStatus('success')
-      setMessage(`Profile extracted from ${file.name}`)
-      onExtracted(result.extracted)
+      if (result.extracted && Object.keys(result.extracted).length > 0) {
+        setStatus('success')
+        setMessage(`Profile extracted from ${file.name}`)
+        onExtracted(result.extracted)
+      } else {
+        setStatus('success')
+        setMessage(`Resume uploaded. No data could be auto-extracted — please fill in below.`)
+        onExtracted({})
+      }
       setTimeout(() => setStatus('idle'), 4000)
-    } catch {
+    } catch (error) {
       setStatus('error')
-      setMessage('Extraction failed. Please try again.')
+      setMessage('Upload failed. Check file format and try again.')
       setTimeout(() => setStatus('idle'), 4000)
     }
   }, [onExtracted])

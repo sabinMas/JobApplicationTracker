@@ -125,25 +125,35 @@ async def structured(
     model_id = BEDROCK_SMART_MODEL if tier == "smart" else BEDROCK_FAST_MODEL
     providers = ["bedrock", "cerebras"] if AI_PROVIDER == "bedrock" else ["cerebras", "bedrock"]
     last_error: Exception | None = None
+    errors: dict[str, str] = {}
+
     for provider in providers:
         try:
+            logger.info(f"Trying AI provider: {provider} (tier={tier}, model={model_id if provider == 'bedrock' else 'cerebras'})")
             if provider == "bedrock":
                 result = await _bedrock_chat(
                     system, user, temperature, model_id, tool_schema=schema
                 )
                 assert isinstance(result, dict)
+                logger.info(f"✓ Bedrock succeeded")
                 return result
             text = await cerebras_service._chat(
                 system + " Return ONLY valid JSON matching the requested structure.",
                 user,
                 temperature,
             )
-            return _parse_json_text(text)
+            result = _parse_json_text(text)
+            logger.info(f"✓ Cerebras succeeded")
+            return result
         except Exception as e:
             last_error = e
+            error_msg = f"{type(e).__name__}: {str(e)[:200]}"
+            errors[provider] = error_msg
             logger.warning(
-                f"AI provider '{provider}' failed for structured call, trying next")
-    raise RuntimeError(f"All AI providers failed: {last_error}")
+                f"AI provider '{provider}' failed: {error_msg}, trying next...")
+
+    error_detail = "; ".join(f"{k}={v}" for k, v in errors.items())
+    raise RuntimeError(f"All AI providers failed — {error_detail}")
 
 
 # ─── High-level functions (the app-facing API) ───────────────────────────────
@@ -210,11 +220,15 @@ async def extract_profile(resume_text: str) -> dict:
         "Use null or empty arrays for missing fields."
     )
     try:
-        return await structured(
+        logger.info(f"Starting profile extraction from {len(resume_text)} chars of resume text")
+        result = await structured(
             system, f"Resume text:\n\n{resume_text[:8000]}", _PROFILE_SCHEMA, temperature=0.1
         )
+        logger.info(f"✓ Profile extraction succeeded: {result.get('full_name', 'Unknown')}")
+        return result
     except Exception as e:
-        logger.error(f"extract_profile failed: {e}")
+        logger.error(f"✗ extract_profile failed: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.warning(f"Falling back to returning empty profile (user can fill in manually)")
         return {}
 
 

@@ -5,11 +5,18 @@ import {
 } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '../api/dashboard';
+import { getProfile } from '../api/client';
+import { AlertCircle, CheckCircle2, ClipboardList, Zap } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['dashboard-metrics'],
     queryFn: () => dashboardAPI.getMetrics(7),
+  });
+
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: getProfile,
   });
 
   if (isLoading) {
@@ -30,6 +37,10 @@ const Dashboard: React.FC = () => {
       </div>
     );
   }
+
+  // Check setup completion
+  const hasProfile = profile && (profile.skills?.length || profile.experience?.length || profile.full_name);
+  const totalJobs = metrics.total_jobs_discovered || 0;
 
   const sourceData = Object.entries(metrics.by_source || {}).map(([name, value]) => ({
     name,
@@ -54,6 +65,44 @@ const Dashboard: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold text-white mb-2">Dashboard</h1>
         <p className="text-gray-400 mb-8">Real-time job application tracking and metrics</p>
+
+        {/* Onboarding Guidance */}
+        {!hasProfile && (
+          <div className="mb-8 bg-amber-900/30 border border-amber-600/50 rounded-lg p-6 flex gap-4">
+            <AlertCircle className="text-amber-400 flex-shrink-0" size={24} />
+            <div className="flex-1">
+              <h3 className="text-white font-semibold mb-2">Get Started: Upload Your Resume</h3>
+              <p className="text-gray-300 text-sm mb-4">
+                To begin, go to <strong>Profile</strong> and upload your resume PDF. We'll extract your information
+                and use it to find perfectly matched job opportunities.
+              </p>
+              <a href="/profile" className="inline-block bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded font-medium text-sm transition-colors">
+                Go to Profile
+              </a>
+            </div>
+          </div>
+        )}
+
+        {hasProfile && totalJobs === 0 && (
+          <div className="mb-8 bg-blue-900/30 border border-blue-600/50 rounded-lg p-6 flex gap-4">
+            <Zap className="text-blue-400 flex-shrink-0" size={24} />
+            <div className="flex-1">
+              <h3 className="text-white font-semibold mb-2">Ready to Find Jobs?</h3>
+              <p className="text-gray-300 text-sm mb-4">
+                Your profile is set up! Go to <strong>Preferences</strong> to define what jobs you're looking for,
+                then click <strong>Run Now</strong> on the <strong>Pipeline</strong> page to discover matching opportunities.
+              </p>
+              <div className="flex gap-3">
+                <a href="/preferences" className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium text-sm transition-colors">
+                  Set Preferences
+                </a>
+                <a href="/pipeline" className="inline-block bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium text-sm transition-colors">
+                  Go to Pipeline
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-slate-700/50 backdrop-blur p-6 rounded-lg border border-slate-600">
