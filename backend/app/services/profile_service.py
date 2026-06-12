@@ -64,19 +64,6 @@ def _merge_array_field(existing: list, extracted: list, field_name: str, dedup_k
     changed = False
 
     for item in extracted:
-        # Extract identifier based on field type
-        if isinstance(item, dict):
-            # For dicts (experience, education, certifications)
-            if field_name == "skills":
-                item_id = item
-            elif field_name == "experience":
-                item_id = (item.get("company", ""), item.get("title", ""))
-            elif field_name == "education":
-                item_id = (item.get("school", ""), item.get("degree", ""))
-            elif field_name == "certifications":
-                item_id = item.get("name", "")
-            else:
-                item_id = item
         # Check if already exists
         already_exists = False
         for existing_item in merged:

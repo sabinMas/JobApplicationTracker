@@ -182,7 +182,7 @@ async def full_automate(body: FullAutomationRequest, db: AsyncSession = Depends(
 
     # Generate tailored documents
     try:
-        resume_md = await ai_service.tailor_resume(
+        await ai_service.tailor_resume(
             job_description=job.description or "",
             job_requirements=job.requirements or "",
             base_resume_text=base_resume.content_text,
@@ -196,17 +196,13 @@ async def full_automate(body: FullAutomationRequest, db: AsyncSession = Depends(
         base_cls = cl_result.scalars().all()
         example_texts = [doc.content_text for doc in base_cls if doc.content_text]
 
-        cover_letter_text = await ai_service.generate_cover_letter(
+        await ai_service.generate_cover_letter(
             job_description=job.description or "",
             company=job.company,
             job_title=job.title,
             profile=profile_dict,
             example_cover_letters=example_texts,
         )
-
-        # Save tailored documents
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        safe_company = "".join(c for c in job.company if c.isalnum() or c in " _-")[:30]
 
         # Create application record
         application = Application(

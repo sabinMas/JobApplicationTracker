@@ -143,7 +143,7 @@ class GitHubJobSource(JobSource):
         if "created_at" in job_data:
             try:
                 posted_date = job_data["created_at"]  # Already in ISO format
-            except:
+            except Exception:
                 pass
         
         # Normalize job type

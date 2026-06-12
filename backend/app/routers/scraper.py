@@ -115,7 +115,6 @@ async def list_actors() -> list[ActorListResponse]:
     """List all registered actors."""
     actors = []
     for name in actor_registry.list():
-        actor = actor_registry.get(name)
         actors.append(
             ActorListResponse(
                 name=name,

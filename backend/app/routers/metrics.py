@@ -7,7 +7,7 @@ success rates, performance, and platform-specific analytics.
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from datetime import datetime, timedelta, timezone
 
 from ..database import get_db
@@ -345,7 +345,3 @@ async def get_retry_candidates(
             for app in candidates
         ],
     }
-
-
-# Add missing imports
-from sqlalchemy import or_

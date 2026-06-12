@@ -156,7 +156,7 @@ class RSSJobSource(JobSource):
                 try:
                     dt = datetime(*published_struct[:6])
                     posted_date = dt.isoformat()
-                except:
+                except Exception:
                     pass
         
         return JobListing(
