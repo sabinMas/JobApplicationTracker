@@ -37,7 +37,9 @@ async def _perform_auto_apply(
 
     if app.tailored_resume_id:
         doc = (
-            await db.execute(select(Document).where(Document.id == app.tailored_resume_id))
+            await db.execute(
+                select(Document).where(Document.id == app.tailored_resume_id)
+            )
         ).scalar_one_or_none()
         if doc:
             resume_path = doc.file_path
@@ -85,7 +87,9 @@ async def run_full_auto_apply(db: AsyncSession, application_id: int) -> dict:
     if not app:
         raise AutoApplyPreconditionError("Application not found.")
 
-    job = (await db.execute(select(Job).where(Job.id == app.job_id))).scalar_one_or_none()
+    job = (
+        await db.execute(select(Job).where(Job.id == app.job_id))
+    ).scalar_one_or_none()
     if not job or not job.apply_url:
         raise AutoApplyPreconditionError("Job has no apply URL.")
 
@@ -111,6 +115,7 @@ async def run_full_auto_apply(db: AsyncSession, application_id: int) -> dict:
     await db.refresh(metric)
 
     try:
+
         async def retry_callback(attempt, wait_time, error):
             logger.warning(
                 f"Retrying auto-apply for application {application_id} "

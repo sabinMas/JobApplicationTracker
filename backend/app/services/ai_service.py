@@ -35,7 +35,9 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "qwen.qwen3-coder-next")
 BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "qwen.qwen3-coder-30b-a3b-v1:0")
 
-logger.info(f"AI Provider: {AI_PROVIDER.upper()} | Fast: {BEDROCK_FAST_MODEL} | Smart: {BEDROCK_SMART_MODEL}")
+logger.info(
+    f"AI Provider: {AI_PROVIDER.upper()} | Fast: {BEDROCK_FAST_MODEL} | Smart: {BEDROCK_SMART_MODEL}"
+)
 
 _session = aioboto3.Session()
 
@@ -71,7 +73,9 @@ async def _bedrock_chat(
             "toolChoice": {"tool": {"name": tool_name}},
         }
 
-    logger.debug(f"Calling Bedrock Converse: model={model_id}, structured={tool_schema is not None}")
+    logger.debug(
+        f"Calling Bedrock Converse: model={model_id}, structured={tool_schema is not None}"
+    )
     try:
         async with _session.client("bedrock-runtime", region_name=AWS_REGION) as client:
             response = await client.converse(**kwargs)
@@ -94,7 +98,13 @@ async def _bedrock_chat(
 
 def _parse_json_text(result: str) -> dict:
     """Best-effort JSON parse for providers without native structured output."""
-    result = result.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    result = (
+        result.strip()
+        .removeprefix("```json")
+        .removeprefix("```")
+        .removesuffix("```")
+        .strip()
+    )
     return json.loads(result)
 
 
@@ -163,11 +173,18 @@ async def extract_job(page_text: str) -> dict:
     )
     try:
         return await structured(
-            system, f"Job page text:\n\n{page_text[:8000]}", _JOB_SCHEMA, temperature=0.1
+            system,
+            f"Job page text:\n\n{page_text[:8000]}",
+            _JOB_SCHEMA,
+            temperature=0.1,
         )
     except Exception as e:
         logger.error(f"extract_job failed: {e}")
-        return {"title": "Unknown", "company": "Unknown", "description": page_text[:500]}
+        return {
+            "title": "Unknown",
+            "company": "Unknown",
+            "description": page_text[:500],
+        }
 
 
 _PROFILE_SCHEMA = {
@@ -180,11 +197,14 @@ _PROFILE_SCHEMA = {
         "linkedin_url": {"type": ["string", "null"]},
         "github_url": {"type": ["string", "null"]},
         "portfolio_url": {"type": ["string", "null"]},
-        "summary": {"type": ["string", "null"], "description": "2-4 sentence professional summary"},
+        "summary": {
+            "type": ["string", "null"],
+            "description": "2-4 sentence professional summary",
+        },
         "skills": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "List of technologies, languages, and skills"
+            "description": "List of technologies, languages, and skills",
         },
         "experience": {
             "type": "array",
@@ -196,9 +216,9 @@ _PROFILE_SCHEMA = {
                     "start": {"type": ["string", "null"]},
                     "end": {"type": ["string", "null"]},
                     "bullets": {"type": "array", "items": {"type": "string"}},
-                }
+                },
             },
-            "description": "Work experience entries"
+            "description": "Work experience entries",
         },
         "education": {
             "type": "array",
@@ -211,9 +231,9 @@ _PROFILE_SCHEMA = {
                     "start": {"type": ["string", "null"]},
                     "end": {"type": ["string", "null"]},
                     "gpa": {"type": ["string", "null"]},
-                }
+                },
             },
-            "description": "Education and degrees"
+            "description": "Education and degrees",
         },
         "certifications": {
             "type": "array",
@@ -223,9 +243,9 @@ _PROFILE_SCHEMA = {
                     "name": {"type": "string"},
                     "issuer": {"type": ["string", "null"]},
                     "date": {"type": ["string", "null"]},
-                }
+                },
             },
-            "description": "Certifications and credentials"
+            "description": "Certifications and credentials",
         },
     },
 }
@@ -246,15 +266,26 @@ async def extract_profile(resume_text: str) -> dict:
         "IMPORTANT: Extract skills and summary even if brief."
     )
     try:
-        logger.info(f"Starting profile extraction from {len(resume_text)} chars of resume text")
-        result = await structured(
-            system, f"Resume text:\n\n{resume_text[:8000]}", _PROFILE_SCHEMA, temperature=0.1
+        logger.info(
+            f"Starting profile extraction from {len(resume_text)} chars of resume text"
         )
-        logger.info(f"✓ Profile extraction succeeded: {result.get('full_name', 'Unknown')}")
+        result = await structured(
+            system,
+            f"Resume text:\n\n{resume_text[:8000]}",
+            _PROFILE_SCHEMA,
+            temperature=0.1,
+        )
+        logger.info(
+            f"✓ Profile extraction succeeded: {result.get('full_name', 'Unknown')}"
+        )
         return result
     except Exception as e:
-        logger.error(f"✗ extract_profile failed: {type(e).__name__}: {str(e)}", exc_info=True)
-        logger.warning("Falling back to returning empty profile (user can fill in manually)")
+        logger.error(
+            f"✗ extract_profile failed: {type(e).__name__}: {str(e)}", exc_info=True
+        )
+        logger.warning(
+            "Falling back to returning empty profile (user can fill in manually)"
+        )
         return {}
 
 
@@ -332,7 +363,8 @@ async def generate_cover_letter(
 ) -> str:
     """Return a tailored cover letter in plain text."""
     examples_block = "\n\n---\n\n".join(
-        f"EXAMPLE {i+1}:\n{ex[:1500]}" for i, ex in enumerate(example_cover_letters[:3])
+        f"EXAMPLE {i + 1}:\n{ex[:1500]}"
+        for i, ex in enumerate(example_cover_letters[:3])
     )
     system = (
         "You are an expert cover letter writer. Write a compelling, personalized cover letter "

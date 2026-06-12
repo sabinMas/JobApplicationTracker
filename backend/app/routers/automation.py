@@ -20,14 +20,19 @@ class QuickApplyRequest(BaseModel):
     job_id: int
     auto_submit: bool = False
 
+
 router = APIRouter(prefix="/api/automation", tags=["automation"])
 
 
 @router.post("/start", response_model=AutomationSessionOut)
-async def start_automation(body: AutomationStartRequest, db: AsyncSession = Depends(get_db)):
+async def start_automation(
+    body: AutomationStartRequest, db: AsyncSession = Depends(get_db)
+):
     """Start a Playwright session for the given application."""
     # Load application + job
-    app_result = await db.execute(select(Application).where(Application.id == body.application_id))
+    app_result = await db.execute(
+        select(Application).where(Application.id == body.application_id)
+    )
     app = app_result.scalar_one_or_none()
     if not app:
         raise HTTPException(404, "Application not found.")
@@ -51,9 +56,7 @@ async def start_automation(body: AutomationStartRequest, db: AsyncSession = Depe
 @router.post("/fill/{session_id}")
 async def fill_application(session_id: str, db: AsyncSession = Depends(get_db)):
     """AI-fills all form fields using the user's profile."""
-    profile_result = await db.execute(
-        select(Profile)
-    )
+    profile_result = await db.execute(select(Profile))
     profile = profile_result.scalar_one_or_none()
     if not profile:
         raise HTTPException(400, "Profile not set up.")
@@ -70,7 +73,9 @@ async def upload_docs(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload tailored resume and cover letter to the open application form."""
-    app_result = await db.execute(select(Application).where(Application.id == application_id))
+    app_result = await db.execute(
+        select(Application).where(Application.id == application_id)
+    )
     app = app_result.scalar_one_or_none()
     if not app:
         raise HTTPException(404, "Application not found.")
@@ -79,18 +84,24 @@ async def upload_docs(
     cover_letter_path = None
 
     if app.tailored_resume_id:
-        doc_result = await db.execute(select(Document).where(Document.id == app.tailored_resume_id))
+        doc_result = await db.execute(
+            select(Document).where(Document.id == app.tailored_resume_id)
+        )
         doc = doc_result.scalar_one_or_none()
         if doc:
             resume_path = doc.file_path
 
     if app.tailored_cover_letter_id:
-        doc_result = await db.execute(select(Document).where(Document.id == app.tailored_cover_letter_id))
+        doc_result = await db.execute(
+            select(Document).where(Document.id == app.tailored_cover_letter_id)
+        )
         doc = doc_result.scalar_one_or_none()
         if doc:
             cover_letter_path = doc.file_path
 
-    await playwright_service.upload_documents(session_id, resume_path, cover_letter_path)
+    await playwright_service.upload_documents(
+        session_id, resume_path, cover_letter_path
+    )
     return {"ok": True}
 
 
@@ -130,6 +141,7 @@ async def session_status(session_id: str):
 
 # ─── WebSocket endpoint ───────────────────────────────────────────────────────
 
+
 @router.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await ws_manager.connect(session_id, websocket)
@@ -145,8 +157,11 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
 # ─── FULL AUTOMATION ENDPOINTS ───────────────────────────────────────────────────
 
+
 @router.post("/full-automate")
-async def full_automate(body: FullAutomationRequest, db: AsyncSession = Depends(get_db)):
+async def full_automate(
+    body: FullAutomationRequest, db: AsyncSession = Depends(get_db)
+):
     """
     Complete end-to-end automation:
     1. Load job & profile
@@ -171,7 +186,8 @@ async def full_automate(body: FullAutomationRequest, db: AsyncSession = Depends(
 
     # Load base resume
     resume_result = await db.execute(
-        select(Document).where(Document.type == "resume", Document.variant == "base")
+        select(Document)
+        .where(Document.type == "resume", Document.variant == "base")
         .order_by(Document.created_at.desc())
     )
     base_resume = resume_result.scalar_one_or_none()
@@ -191,7 +207,9 @@ async def full_automate(body: FullAutomationRequest, db: AsyncSession = Depends(
 
         # Load example cover letters
         cl_result = await db.execute(
-            select(Document).where(Document.type == "cover_letter", Document.variant == "base")
+            select(Document).where(
+                Document.type == "cover_letter", Document.variant == "base"
+            )
         )
         base_cls = cl_result.scalars().all()
         example_texts = [doc.content_text for doc in base_cls if doc.content_text]
@@ -232,7 +250,9 @@ async def full_automate(body: FullAutomationRequest, db: AsyncSession = Depends(
 
 
 @router.post("/quick-apply/{job_id}")
-async def quick_apply(job_id: int, body: QuickApplyRequest, db: AsyncSession = Depends(get_db)):
+async def quick_apply(
+    job_id: int, body: QuickApplyRequest, db: AsyncSession = Depends(get_db)
+):
     """
     Quick apply using already-tailored documents.
     If no tailored documents exist, generate them on the fly.
@@ -247,7 +267,7 @@ async def quick_apply(job_id: int, body: QuickApplyRequest, db: AsyncSession = D
         select(Document).where(
             Document.type == "resume",
             Document.variant == "tailored",
-            Document.job_id == job_id
+            Document.job_id == job_id,
         )
     )
     tailored_resume = resume_result.scalar_one_or_none()
@@ -256,7 +276,7 @@ async def quick_apply(job_id: int, body: QuickApplyRequest, db: AsyncSession = D
         select(Document).where(
             Document.type == "cover_letter",
             Document.variant == "tailored",
-            Document.job_id == job_id
+            Document.job_id == job_id,
         )
     )
     tailored_cl = cl_result.scalar_one_or_none()

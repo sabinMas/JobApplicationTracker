@@ -6,7 +6,21 @@ import os
 
 from .logging_config import setup_logging, get_logger
 from .database import init_db
-from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics, dashboard, auto_apply_scored, scraper, job_enrichment
+from .routers import (
+    jobs,
+    applications,
+    profile,
+    documents,
+    ai,
+    automation,
+    auto_apply,
+    scheduler,
+    metrics,
+    dashboard,
+    auto_apply_scored,
+    scraper,
+    job_enrichment,
+)
 from .services.job_sources import JobSourceManager
 from .services.job_sync_scheduler import (
     JobSyncScheduler,
@@ -27,6 +41,7 @@ logger = get_logger(__name__)
 
 _db_initialized = False
 _job_sync_scheduler = None
+
 
 def _init_actors():
     """Register all available actors."""
@@ -71,7 +86,10 @@ async def _init_db_background():
         _db_initialized = True
         logger.info("Database initialized successfully")
     except Exception as e:
-        logger.error(f"DB init error (will retry on first request): {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"DB init error (will retry on first request): {e}",
+            extra_fields={"error": str(e)},
+        )
 
 
 app = FastAPI(
@@ -119,4 +137,8 @@ app.include_router(job_enrichment.router)  # Phase 5: Job enrichment pipeline
 @app.get("/health")
 async def health():
     logger.debug("Health check called")
-    return {"status": "ok", "service": "JobApplicationTracker", "db_initialized": _db_initialized}
+    return {
+        "status": "ok",
+        "service": "JobApplicationTracker",
+        "db_initialized": _db_initialized,
+    }

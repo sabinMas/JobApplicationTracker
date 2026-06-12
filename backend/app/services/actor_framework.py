@@ -10,11 +10,13 @@ logger = logging.getLogger(__name__)
 
 class ActorInput(BaseModel):
     """Base class for actor inputs. Subclass for each actor."""
+
     pass
 
 
 class ActorOutput(BaseModel):
     """Base class for actor outputs. Subclass for each actor."""
+
     pass
 
 

@@ -92,7 +92,9 @@ def setup_logging(environment: Optional[str] = None) -> logging.Logger:
     logging.setLoggerClass(StructuredLogger)
 
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG if environment == "development" else logging.INFO)
+    root_logger.setLevel(
+        logging.DEBUG if environment == "development" else logging.INFO
+    )
 
     # Remove any existing handlers (avoid duplicates)
     for handler in root_logger.handlers[:]:

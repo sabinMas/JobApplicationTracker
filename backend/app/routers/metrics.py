@@ -25,7 +25,7 @@ async def get_metrics_dashboard(
 ):
     """
     Get comprehensive metrics dashboard for the last N days.
-    
+
     Returns:
     - Summary statistics
     - Daily timeseries data
@@ -33,10 +33,10 @@ async def get_metrics_dashboard(
     - Today's progress
     """
     logger.info("Fetching metrics dashboard", extra_fields={"days": days})
-    
+
     now = datetime.now(timezone.utc)
     start_date = now - timedelta(days=days)
-    
+
     # Overall stats
     total_result = await db.execute(
         select(func.count(ApplicationMetric.id)).where(
@@ -44,7 +44,7 @@ async def get_metrics_dashboard(
         )
     )
     total_attempts = total_result.scalar() or 0
-    
+
     # Success rate
     success_result = await db.execute(
         select(func.count(ApplicationMetric.id)).where(
@@ -56,7 +56,7 @@ async def get_metrics_dashboard(
     )
     successful = success_result.scalar() or 0
     success_rate = (successful / total_attempts * 100) if total_attempts > 0 else 0
-    
+
     # Average duration
     duration_result = await db.execute(
         select(func.avg(ApplicationMetric.duration_ms)).where(
@@ -64,17 +64,17 @@ async def get_metrics_dashboard(
         )
     )
     avg_duration_ms = duration_result.scalar() or 0
-    
+
     # By ATS platform
     ats_result = await db.execute(
         select(
             ApplicationMetric.ats_platform_detected,
             func.count(ApplicationMetric.id).label("attempts"),
-            func.sum(func.cast(
-                (ApplicationMetric.status == "success"),
-                type_=int
-            )).label("successful"),
-        ).where(ApplicationMetric.created_at >= start_date)
+            func.sum(
+                func.cast((ApplicationMetric.status == "success"), type_=int)
+            ).label("successful"),
+        )
+        .where(ApplicationMetric.created_at >= start_date)
         .group_by(ApplicationMetric.ats_platform_detected)
         .order_by(func.count(ApplicationMetric.id).desc())
     )
@@ -87,17 +87,17 @@ async def get_metrics_dashboard(
         }
         for row in ats_result.all()
     ]
-    
+
     # Daily timeseries (for chart)
     daily_result = await db.execute(
         select(
             func.date(ApplicationMetric.created_at).label("date"),
             func.count(ApplicationMetric.id).label("attempts"),
-            func.sum(func.cast(
-                (ApplicationMetric.status == "success"),
-                type_=int
-            )).label("successful"),
-        ).where(ApplicationMetric.created_at >= start_date)
+            func.sum(
+                func.cast((ApplicationMetric.status == "success"), type_=int)
+            ).label("successful"),
+        )
+        .where(ApplicationMetric.created_at >= start_date)
         .group_by(func.date(ApplicationMetric.created_at))
         .order_by(func.date(ApplicationMetric.created_at))
     )
@@ -110,29 +110,31 @@ async def get_metrics_dashboard(
         }
         for row in daily_result.all()
     ]
-    
+
     # Today's stats
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_result = await db.execute(
         select(
             func.count(ApplicationMetric.id),
-            func.sum(func.cast(
-                (ApplicationMetric.status == "success"),
-                type_=int
-            )),
+            func.sum(func.cast((ApplicationMetric.status == "success"), type_=int)),
         ).where(ApplicationMetric.created_at >= today_start)
     )
     today_row = today_result.first()
     today_attempts = today_row[0] if today_row else 0
     today_successful = today_row[1] or 0 if today_row else 0
-    today_success_rate = (today_successful / today_attempts * 100) if today_attempts > 0 else 0
-    
-    logger.info("Metrics dashboard retrieved", extra_fields={
-        "total_attempts": total_attempts,
-        "success_rate": success_rate,
-        "period_days": days,
-    })
-    
+    today_success_rate = (
+        (today_successful / today_attempts * 100) if today_attempts > 0 else 0
+    )
+
+    logger.info(
+        "Metrics dashboard retrieved",
+        extra_fields={
+            "total_attempts": total_attempts,
+            "success_rate": success_rate,
+            "period_days": days,
+        },
+    )
+
     return {
         "period": {
             "start": start_date.isoformat(),
@@ -162,19 +164,19 @@ async def get_recent_errors(
 ):
     """
     Get recent application errors for debugging.
-    
+
     Returns the N most recent failed submission attempts.
     """
     logger.info("Fetching recent errors", extra_fields={"limit": limit})
-    
+
     result = await db.execute(
-        select(ApplicationMetric).where(
-            ApplicationMetric.status == "failed"
-        ).order_by(ApplicationMetric.created_at.desc())
+        select(ApplicationMetric)
+        .where(ApplicationMetric.status == "failed")
+        .order_by(ApplicationMetric.created_at.desc())
         .limit(limit)
     )
     errors = result.scalars().all()
-    
+
     return {
         "total_errors": len(errors),
         "errors": [
@@ -199,34 +201,39 @@ async def get_application_metrics(
 ):
     """
     Get metrics for a specific application (all retry attempts).
-    
+
     Useful for debugging why an application failed.
     """
-    logger.info("Fetching metrics for application", extra_fields={"application_id": application_id})
-    
+    logger.info(
+        "Fetching metrics for application",
+        extra_fields={"application_id": application_id},
+    )
+
     # Get application
     app_result = await db.execute(
         select(Application).where(Application.id == application_id)
     )
     app = app_result.scalar_one_or_none()
-    
+
     if not app:
         return {"error": "Application not found"}
-    
+
     # Get all metrics for this application
     metrics_result = await db.execute(
-        select(ApplicationMetric).where(
-            ApplicationMetric.application_id == application_id
-        ).order_by(ApplicationMetric.created_at)
+        select(ApplicationMetric)
+        .where(ApplicationMetric.application_id == application_id)
+        .order_by(ApplicationMetric.created_at)
     )
     metrics = metrics_result.scalars().all()
-    
+
     # Compute statistics
     attempts = len(metrics)
     successful_attempts = sum(1 for m in metrics if m.status == "success")
     failed_attempts = sum(1 for m in metrics if m.status == "failed")
-    avg_duration = sum(m.duration_ms or 0 for m in metrics) / attempts if attempts > 0 else 0
-    
+    avg_duration = (
+        sum(m.duration_ms or 0 for m in metrics) / attempts if attempts > 0 else 0
+    )
+
     return {
         "application_id": application_id,
         "job_id": app.job_id,
@@ -260,14 +267,14 @@ async def get_metrics_summary(
 ):
     """
     Get quick summary statistics (last 24 hours).
-    
+
     Useful for dashboard widgets or quick status checks.
     """
     logger.info("Fetching metrics summary")
-    
+
     now = datetime.now(timezone.utc)
     today_start = now - timedelta(hours=24)
-    
+
     # Count applications by status
     all_statuses_result = await db.execute(
         select(
@@ -275,22 +282,20 @@ async def get_metrics_summary(
             func.count(Application.id),
         ).group_by(Application.status)
     )
-    
+
     status_counts = {}
     for status, count in all_statuses_result.all():
         status_counts[status] = count
-    
+
     # Metrics for last 24 hours
     metrics_result = await db.execute(
-        select(ApplicationMetric).where(
-            ApplicationMetric.created_at >= today_start
-        )
+        select(ApplicationMetric).where(ApplicationMetric.created_at >= today_start)
     )
     metrics = metrics_result.scalars().all()
-    
+
     success_count = sum(1 for m in metrics if m.status == "success")
     fail_count = sum(1 for m in metrics if m.status == "failed")
-    
+
     return {
         "period_hours": 24,
         "applications_by_status": status_counts,
@@ -310,27 +315,29 @@ async def get_retry_candidates(
 ):
     """
     Get applications ready for retry.
-    
+
     Returns failed applications whose next_retry_at is in the past.
     """
     logger.info("Fetching retry candidates", extra_fields={"limit": limit})
-    
+
     now = datetime.now(timezone.utc)
-    
+
     result = await db.execute(
-        select(Application).where(
+        select(Application)
+        .where(
             and_(
                 Application.retry_count < 3,
                 or_(
                     Application.next_retry_at.is_(None),
                     Application.next_retry_at <= now,
-                )
+                ),
             )
-        ).order_by(Application.next_retry_at)
+        )
+        .order_by(Application.next_retry_at)
         .limit(limit)
     )
     candidates = result.scalars().all()
-    
+
     return {
         "total_candidates": len(candidates),
         "candidates": [
@@ -339,7 +346,9 @@ async def get_retry_candidates(
                 "job_id": app.job_id,
                 "retry_count": app.retry_count,
                 "last_error": app.last_error,
-                "next_retry_at": app.next_retry_at.isoformat() if app.next_retry_at else None,
+                "next_retry_at": app.next_retry_at.isoformat()
+                if app.next_retry_at
+                else None,
                 "error_history_count": len(app.error_history or []),
             }
             for app in candidates

@@ -5,6 +5,7 @@ from datetime import datetime
 
 # ─── Profile ────────────────────────────────────────────────────────────────
 
+
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[str] = None
@@ -30,6 +31,7 @@ class ProfileOut(ProfileUpdate):
 
 
 # ─── Search Preferences ──────────────────────────────────────────────────────
+
 
 class SearchPreferencesUpdate(BaseModel):
     target_roles: Optional[List[str]] = None
@@ -57,6 +59,7 @@ class SearchPreferencesOut(SearchPreferencesUpdate):
 
 # ─── Pipeline ────────────────────────────────────────────────────────────────
 
+
 class PipelineRunOut(BaseModel):
     id: int
     trigger: str
@@ -76,6 +79,7 @@ class PipelineRunOut(BaseModel):
 
 
 # ─── Job ─────────────────────────────────────────────────────────────────────
+
 
 class JobCreate(BaseModel):
     title: str
@@ -126,6 +130,7 @@ class ScrapeRequest(BaseModel):
 
 # ─── Application ─────────────────────────────────────────────────────────────
 
+
 class ApplicationCreate(BaseModel):
     job_id: int
     notes: Optional[str] = None
@@ -160,6 +165,7 @@ class ApplicationOut(BaseModel):
 
 # ─── Document ────────────────────────────────────────────────────────────────
 
+
 class DocumentOut(BaseModel):
     id: int
     type: str
@@ -183,6 +189,7 @@ class MapFieldsRequest(BaseModel):
 
 # ─── Automation ──────────────────────────────────────────────────────────────
 
+
 class AutomationStartRequest(BaseModel):
     application_id: int
 
@@ -195,10 +202,11 @@ class AutomationSessionOut(BaseModel):
 
 # ─── WebSocket event ─────────────────────────────────────────────────────────
 
+
 class WSEvent(BaseModel):
     session_id: str
     step: str
-    status: str   # running / paused / done / error
+    status: str  # running / paused / done / error
     message: str
     screenshot_b64: Optional[str] = None
     timestamp: Optional[datetime] = None
@@ -206,8 +214,10 @@ class WSEvent(BaseModel):
 
 # ─── Phase 4: Dashboard & Scoring ────────────────────────────────────────────
 
+
 class ScoringStats(BaseModel):
     """Job scoring statistics"""
+
     total_jobs: int
     total_scored: int
     percentage_scored: float
@@ -219,6 +229,7 @@ class ScoringStats(BaseModel):
 
 class JobByScoreOut(BaseModel):
     """Job with scoring details"""
+
     id: int
     title: str
     company: str
@@ -234,6 +245,7 @@ class JobByScoreOut(BaseModel):
 
 class HighScoreJobsOut(BaseModel):
     """Response for high-scoring jobs filter"""
+
     total_available: int
     jobs: List[JobByScoreOut]
     min_score_threshold: int
@@ -241,32 +253,34 @@ class HighScoreJobsOut(BaseModel):
 
 class DashboardMetricsOut(BaseModel):
     """Comprehensive dashboard metrics"""
+
     period_days: int
     timestamp: datetime
-    
+
     # Job discovery metrics
     total_jobs_discovered: int
     jobs_by_source: dict
-    
+
     # Application metrics
     total_applications: int
     applications_by_status: dict
     applications_by_ats: dict
-    
+
     # Scoring metrics
     scoring_stats: ScoringStats
-    
+
     # Performance metrics
     successful_applications: int
     failed_applications: int
     success_rate: float
-    
+
     # Timing metrics
     avg_time_to_apply_minutes: Optional[float] = None
 
 
 class ScoringHealthOut(BaseModel):
     """Scoring system health and status"""
+
     total_jobs: int
     scored_jobs: int
     unscored_jobs: int
@@ -274,12 +288,13 @@ class ScoringHealthOut(BaseModel):
     score_distribution: dict
     avg_score: Optional[float] = None
     high_score_count: int  # score >= 8
-    low_score_count: int   # score <= 4
+    low_score_count: int  # score <= 4
     timestamp: datetime
 
 
 class ScoreJobsRequest(BaseModel):
     """Request to score unscored jobs"""
+
     min_date: Optional[datetime] = None
     limit: int = 100
     status: Optional[str] = None
@@ -287,6 +302,7 @@ class ScoreJobsRequest(BaseModel):
 
 class ScoreJobsOut(BaseModel):
     """Response from batch scoring operation"""
+
     jobs_processed: int
     jobs_newly_scored: int
     jobs_skipped: int
@@ -297,6 +313,7 @@ class ScoreJobsOut(BaseModel):
 
 class HighScoreFilterRequest(BaseModel):
     """Request to filter high-score jobs"""
+
     min_score: int = 8
     skip: int = 0
     limit: int = 100
@@ -304,6 +321,7 @@ class HighScoreFilterRequest(BaseModel):
 
 class ApplicationTimelineOut(BaseModel):
     """Time-series application data"""
+
     date: str
     applications_count: int
     successful_count: Optional[int] = None
@@ -312,12 +330,14 @@ class ApplicationTimelineOut(BaseModel):
 
 class ApplicationTimelineResponse(BaseModel):
     """Response with timeline data"""
+
     period_days: int
     data: List[ApplicationTimelineOut]
 
 
 class StatusBreakdownOut(BaseModel):
     """Application status distribution"""
+
     status: str
     count: int
     percentage: float
@@ -325,14 +345,15 @@ class StatusBreakdownOut(BaseModel):
 
 class StatusBreakdownResponse(BaseModel):
     """Response with status breakdown"""
+
     total_applications: int
     breakdown: List[StatusBreakdownOut]
 
 
 class HealthCheckOut(BaseModel):
     """Health check response"""
+
     status: str
     service: str
     db_initialized: bool
     timestamp: datetime
-

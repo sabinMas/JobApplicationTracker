@@ -51,7 +51,9 @@ async def get_metrics(
         total_jobs = jobs_result.scalar() or 0
 
         apps_result = await db.execute(
-            select(func.count(Application.id)).where(Application.created_at >= start_date)
+            select(func.count(Application.id)).where(
+                Application.created_at >= start_date
+            )
         )
         total_apps = apps_result.scalar() or 0
 
@@ -72,7 +74,9 @@ async def get_metrics(
         )
         failed = failed_result.scalar() or 0
 
-        success_rate = successful / (successful + failed) if (successful + failed) > 0 else 0.0
+        success_rate = (
+            successful / (successful + failed) if (successful + failed) > 0 else 0.0
+        )
 
         # Average score
         score_result = await db.execute(
@@ -92,9 +96,7 @@ async def get_metrics(
 
         medium_score_result = await db.execute(
             select(func.count(Job.id)).where(
-                (Job.created_at >= start_date)
-                & (Job.score >= 5)
-                & (Job.score < 8)
+                (Job.created_at >= start_date) & (Job.score >= 5) & (Job.score < 8)
             )
         )
         medium_scores = medium_score_result.scalar() or 0
@@ -169,8 +171,12 @@ async def get_metrics(
         )
 
     except Exception as e:
-        logger.error("Error getting dashboard metrics", extra={"error": str(e), "days": days})
-        raise HTTPException(status_code=500, detail="Failed to retrieve dashboard metrics")
+        logger.error(
+            "Error getting dashboard metrics", extra={"error": str(e), "days": days}
+        )
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve dashboard metrics"
+        )
 
 
 @router.get("/jobs/by-score", response_model=HighScoreJobsOut)
@@ -336,14 +342,20 @@ async def get_status_breakdown(
         for status, count in sorted(status_dict.items()):
             percentage = (count / total * 100) if total > 0 else 0.0
             breakdown_data.append(
-                StatusBreakdownOut(status=status, count=count, percentage=round(percentage, 2))
+                StatusBreakdownOut(
+                    status=status, count=count, percentage=round(percentage, 2)
+                )
             )
 
-        return StatusBreakdownResponse(total_applications=total, breakdown=breakdown_data)
+        return StatusBreakdownResponse(
+            total_applications=total, breakdown=breakdown_data
+        )
 
     except Exception as e:
         logger.error("Error getting status breakdown", extra={"error": str(e)})
-        raise HTTPException(status_code=500, detail="Failed to retrieve status breakdown")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve status breakdown"
+        )
 
 
 @router.get("/health", response_model=HealthCheckOut)

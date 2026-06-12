@@ -2,6 +2,7 @@
 Automated job application scheduler endpoint.
 Allows setting up criteria for automatic applications and managing job sync schedules.
 """
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +23,7 @@ router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
 
 class JobCriteria(BaseModel):
     """Criteria for automatic job applications"""
+
     keywords: Optional[List[str]] = None
     location: Optional[List[str]] = None
     min_salary: Optional[int] = None
@@ -32,6 +34,7 @@ class JobCriteria(BaseModel):
 
 class SchedulerConfig(BaseModel):
     """Configuration for the auto-apply scheduler"""
+
     enabled: bool
     interval_minutes: int = 30
     criteria: JobCriteria
@@ -79,7 +82,9 @@ async def list_pipeline_runs(
     from ..models import PipelineRun
 
     result = await db.execute(
-        select(PipelineRun).order_by(PipelineRun.started_at.desc()).limit(min(limit, 50))
+        select(PipelineRun)
+        .order_by(PipelineRun.started_at.desc())
+        .limit(min(limit, 50))
     )
     return result.scalars().all()
 
@@ -181,7 +186,6 @@ async def test_criteria(
     }
 
 
-
 # ============================================================================
 # Job Sync Scheduler Endpoints
 # ============================================================================
@@ -191,16 +195,16 @@ async def test_criteria(
 async def trigger_job_sync():
     """
     Manually trigger an immediate job sync from all configured sources.
-    
+
     Returns sync statistics (added, duplicates, errors).
     """
     logger.info("Manual job sync triggered")
-    
+
     scheduler = get_scheduler()
     if not scheduler:
         logger.warning("Job sync scheduler not initialized")
         raise HTTPException(503, "Job sync scheduler not initialized")
-    
+
     try:
         result = await scheduler.sync_now()
         return result
@@ -213,7 +217,7 @@ async def trigger_job_sync():
 async def get_job_sync_config():
     """
     Get current job sync scheduler configuration.
-    
+
     Returns:
         Scheduler config including interval, last sync time, etc.
     """
@@ -223,15 +227,16 @@ async def get_job_sync_config():
             "status": "not_initialized",
             "message": "Job sync scheduler not yet initialized",
         }
-    
+
     config = scheduler.get_config()
     logger.info("Job sync config retrieved", extra_fields=config)
-    
+
     return config
 
 
 class JobSyncConfigUpdate(BaseModel):
     """Update job sync configuration"""
+
     interval_minutes: Optional[int] = None
     enabled: Optional[bool] = None
 
@@ -240,7 +245,7 @@ class JobSyncConfigUpdate(BaseModel):
 async def update_job_sync_config(config: JobSyncConfigUpdate):
     """
     Update job sync scheduler configuration.
-    
+
     Args:
         interval_minutes: Sync interval in minutes (minimum 5)
         enabled: Enable/disable scheduler
@@ -248,29 +253,34 @@ async def update_job_sync_config(config: JobSyncConfigUpdate):
     scheduler = get_scheduler()
     if not scheduler:
         raise HTTPException(503, "Job sync scheduler not initialized")
-    
+
     try:
         if config.interval_minutes:
             if config.interval_minutes < 5:
                 raise ValueError("Sync interval must be at least 5 minutes")
             scheduler.set_sync_interval(config.interval_minutes)
-            logger.info("Job sync interval updated", extra_fields={
-                "interval_minutes": config.interval_minutes,
-            })
-        
+            logger.info(
+                "Job sync interval updated",
+                extra_fields={
+                    "interval_minutes": config.interval_minutes,
+                },
+            )
+
         updated_config = scheduler.get_config()
-        
+
         return {
             "status": "updated",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "config": updated_config,
         }
-    
+
     except ValueError as e:
         logger.warning(f"Invalid job sync config: {e}")
         raise HTTPException(400, str(e))
     except Exception as e:
-        logger.error(f"Failed to update job sync config: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Failed to update job sync config: {e}", extra_fields={"error": str(e)}
+        )
         raise HTTPException(500, f"Failed to update config: {str(e)}")
 
 
@@ -278,7 +288,7 @@ async def update_job_sync_config(config: JobSyncConfigUpdate):
 async def get_job_sync_status():
     """
     Get current job sync scheduler status.
-    
+
     Returns:
         Status including whether scheduler is running, last sync time, next sync time.
     """
@@ -289,9 +299,9 @@ async def get_job_sync_status():
             "is_running": False,
             "message": "Job sync scheduler not yet initialized",
         }
-    
+
     config = scheduler.get_config()
-    
+
     return {
         "status": "ok" if scheduler.is_running else "idle",
         **config,

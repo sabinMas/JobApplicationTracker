@@ -2,9 +2,12 @@
 Resume extraction using AWS Bedrock AI (Qwen models).
 We use Bedrock for cost-effective on-demand throughput without infrastructure overhead.
 """
+
 import logging
+
 try:
     import pdfplumber
+
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
@@ -41,7 +44,9 @@ async def parse_resume(pdf_path: str) -> dict:
     if not text or len(text.strip()) < 50:
         raise ValueError("PDF appears to be empty or unreadable")
 
-    logger.info(f"Extracted {len(text)} characters from PDF, parsing with Bedrock AI...")
+    logger.info(
+        f"Extracted {len(text)} characters from PDF, parsing with Bedrock AI..."
+    )
 
     # Use Bedrock to extract profile
     profile = await ai_service.extract_profile(text)

@@ -31,14 +31,18 @@ _SCORE_SCHEMA = {
 }
 
 
-async def load_candidate_context(db: AsyncSession) -> tuple[Optional[Profile], Optional[SearchPreferences]]:
+async def load_candidate_context(
+    db: AsyncSession,
+) -> tuple[Optional[Profile], Optional[SearchPreferences]]:
     """Load the (single-row) Profile and SearchPreferences."""
     profile = (await db.execute(select(Profile))).scalar_one_or_none()
     prefs = (await db.execute(select(SearchPreferences))).scalar_one_or_none()
     return profile, prefs
 
 
-def prefilter_job(job: Job, prefs: Optional[SearchPreferences]) -> Optional[dict[str, Any]]:
+def prefilter_job(
+    job: Job, prefs: Optional[SearchPreferences]
+) -> Optional[dict[str, Any]]:
     """Cheap keyword screen before any AI call.
 
     Returns a complete score-result dict (score=1, SKIP) when the job is a
@@ -86,7 +90,9 @@ def prefilter_job(job: Job, prefs: Optional[SearchPreferences]) -> Optional[dict
     return None
 
 
-def _build_prompt(job: Job, profile: Optional[Profile], prefs: Optional[SearchPreferences]) -> tuple[str, str]:
+def _build_prompt(
+    job: Job, profile: Optional[Profile], prefs: Optional[SearchPreferences]
+) -> tuple[str, str]:
     system = (
         "You are a job-fit evaluator for one specific candidate. Score how well a job "
         "posting matches the candidate's niches, expertise, and preferences on a 1-10 scale.\n"
@@ -118,7 +124,9 @@ def _build_prompt(job: Job, profile: Optional[Profile], prefs: Optional[SearchPr
         remote = "remote OK" if prefs.remote_ok else "remote NOT acceptable"
         candidate_lines.append(f"Locations: {locations or 'N/A'} ({remote})")
         if prefs.must_have_keywords:
-            candidate_lines.append(f"Wants to see: {', '.join(prefs.must_have_keywords)}")
+            candidate_lines.append(
+                f"Wants to see: {', '.join(prefs.must_have_keywords)}"
+            )
 
     user = (
         "CANDIDATE:\n" + "\n".join(candidate_lines) + "\n\n"
@@ -157,7 +165,9 @@ async def score_job(db: AsyncSession, job: Job) -> dict[str, Any]:
     }
 
 
-async def score_and_store(db: AsyncSession, job: Job, rescore: bool = False) -> dict[str, Any]:
+async def score_and_store(
+    db: AsyncSession, job: Job, rescore: bool = False
+) -> dict[str, Any]:
     """Score a job and persist the result onto the Job row."""
     if job.score is not None and not rescore:
         return {
@@ -179,5 +189,7 @@ async def score_and_store(db: AsyncSession, job: Job, rescore: bool = False) -> 
     job.scored_at = datetime.utcnow()
     await db.commit()
 
-    logger.info(f"Scored job {job.id} '{job.title}': {job.score}/10 {job.score_recommendation}")
+    logger.info(
+        f"Scored job {job.id} '{job.title}': {job.score}/10 {job.score_recommendation}"
+    )
     return result

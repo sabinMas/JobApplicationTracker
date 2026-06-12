@@ -57,6 +57,7 @@ async def enqueue_actor_run(
         "input_config": input_config,
     }
     import os
+
     async with _boto_session.client(
         "sqs", region_name=os.getenv("AWS_REGION", "us-east-1")
     ) as sqs:
@@ -130,7 +131,10 @@ async def execute_actor_run(
 
         # Webhook
         if run.webhook_url:
-            await _call_webhook(run.webhook_url, {"run_id": run_id, "status": "success", "items_count": len(items)})
+            await _call_webhook(
+                run.webhook_url,
+                {"run_id": run_id, "status": "success", "items_count": len(items)},
+            )
 
         return True
 
@@ -148,7 +152,9 @@ async def execute_actor_run(
 
         # Webhook
         if run.webhook_url:
-            await _call_webhook(run.webhook_url, {"run_id": run_id, "status": "failed", "error": str(e)})
+            await _call_webhook(
+                run.webhook_url, {"run_id": run_id, "status": "failed", "error": str(e)}
+            )
 
         return False
 
@@ -165,6 +171,7 @@ async def _call_webhook(url: str, payload: Dict[str, Any]) -> None:
 def get_scraper_queue_url() -> str:
     """Get the SQS queue URL for scraper tasks."""
     import os
+
     url = os.getenv("SQS_QUEUE_URL", os.getenv("SCRAPER_QUEUE_URL", ""))
     if not url:
         raise RuntimeError("SQS_QUEUE_URL not configured")

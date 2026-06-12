@@ -40,11 +40,7 @@ class IndeedActor(Actor):
 
         try:
             # Indeed search URL
-            base_url = (
-                f"https://www.indeed.com/jobs"
-                f"?q={query}"
-                f"&l={location}"
-            )
+            base_url = f"https://www.indeed.com/jobs?q={query}&l={location}"
 
             logger.info(f"Scraping Indeed: {base_url}")
 
@@ -55,8 +51,7 @@ class IndeedActor(Actor):
 
             # Extract job listing URLs
             job_urls = re.findall(
-                r'https://www\.indeed\.com/rc/clk\?.*?jk=([a-f0-9]+)',
-                html
+                r"https://www\.indeed\.com/rc/clk\?.*?jk=([a-f0-9]+)", html
             )[:5]  # Limit to first 5
 
             logger.info(f"Found {len(job_urls)} job links on Indeed")

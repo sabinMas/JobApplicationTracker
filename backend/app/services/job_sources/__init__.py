@@ -9,11 +9,11 @@ Supported sources:
 
 Usage:
     from app.services.job_sources import JobSourceManager, RSSJobSource, GitHubJobSource
-    
+
     manager = JobSourceManager()
     manager.add_source(RSSJobSource("https://news.ycombinator.com/rss"))
     manager.add_source(GitHubJobSource())
-    
+
     stats = await manager.sync()  # Fetch and save to database
 """
 

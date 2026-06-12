@@ -1,6 +1,7 @@
 """
 WebSocket connection manager for broadcasting automation events to the frontend.
 """
+
 from fastapi import WebSocket
 from typing import Dict, List
 import json
