@@ -212,11 +212,53 @@ _PROFILE_SCHEMA = {
         "linkedin_url": {"type": ["string", "null"]},
         "github_url": {"type": ["string", "null"]},
         "portfolio_url": {"type": ["string", "null"]},
-        "summary": {"type": ["string", "null"]},
-        "skills": {"type": "array", "items": {"type": "string"}},
-        "experience": {"type": "array", "items": {"type": "object"}},
-        "education": {"type": "array", "items": {"type": "object"}},
-        "certifications": {"type": "array", "items": {"type": "object"}},
+        "summary": {"type": ["string", "null"], "description": "2-4 sentence professional summary"},
+        "skills": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of technologies, languages, and skills"
+        },
+        "experience": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "company": {"type": "string"},
+                    "title": {"type": "string"},
+                    "start": {"type": ["string", "null"]},
+                    "end": {"type": ["string", "null"]},
+                    "bullets": {"type": "array", "items": {"type": "string"}},
+                }
+            },
+            "description": "Work experience entries"
+        },
+        "education": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "school": {"type": "string"},
+                    "degree": {"type": ["string", "null"]},
+                    "field": {"type": ["string", "null"]},
+                    "start": {"type": ["string", "null"]},
+                    "end": {"type": ["string", "null"]},
+                    "gpa": {"type": ["string", "null"]},
+                }
+            },
+            "description": "Education and degrees"
+        },
+        "certifications": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "issuer": {"type": ["string", "null"]},
+                    "date": {"type": ["string", "null"]},
+                }
+            },
+            "description": "Certifications and credentials"
+        },
     },
 }
 
@@ -224,11 +266,16 @@ _PROFILE_SCHEMA = {
 async def extract_profile(resume_text: str) -> dict:
     """Given raw text from a resume PDF, return structured profile data."""
     system = (
-        "You are a resume parser. Extract a structured candidate profile. "
-        "experience items are {company, title, start, end, bullets}; "
-        "education items are {school, degree, field, start, end, gpa}; "
-        "certifications items are {name, issuer, date}. "
-        "Use null or empty arrays for missing fields."
+        "You are a resume parser. Extract a comprehensive structured candidate profile. "
+        "Extract ALL the following fields:\n"
+        "- Contact: full_name, email, phone, location, linkedin_url, github_url, portfolio_url\n"
+        "- Summary: professional summary (2-4 sentences about their career)\n"
+        "- Skills: list of technologies, languages, and domain expertise\n"
+        "- Experience: list of {company, title, start, end, bullets (list of achievements)}\n"
+        "- Education: list of {school, degree, field, start, end, gpa}\n"
+        "- Certifications: list of {name, issuer, date}\n"
+        "Use null for missing strings, empty arrays for missing lists. "
+        "IMPORTANT: Extract skills and summary even if brief."
     )
     try:
         logger.info(f"Starting profile extraction from {len(resume_text)} chars of resume text")
