@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm run *)",
       "Bash(python backend/test_bedrock_claude.py)",
-      "Bash(python -m py_compile backend/app/services/profile_service.py)"
+      "Bash(python -m py_compile backend/app/services/profile_service.py)",
+      "Skill(update-config)",
+      "Skill(update-config:*)"
     ]
   }
 }
