@@ -15,7 +15,7 @@ from ..schemas import (
     SearchPreferencesUpdate,
     SearchPreferencesOut,
 )
-from ..services import ai_service, pdf_service, resume_extractor, profile_service
+from ..services import ai_service, resume_extractor, profile_service
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
@@ -93,10 +93,10 @@ async def extract_profile_from_resume(
 
         # Extract profile using AI (Qwen via AWS Bedrock)
         try:
-            print(f"[EXTRACT] Parsing resume with Claude...")
+            print("[EXTRACT] Parsing resume with Claude...")
             extracted = await resume_extractor.parse_resume(str(file_path))
             if not extracted:
-                print(f"[EXTRACT] AI returned empty profile - user can fill in manually")
+                print("[EXTRACT] AI returned empty profile - user can fill in manually")
             else:
                 print(f"[EXTRACT] Profile extracted: {extracted.get('full_name', 'Unknown')}")
                 print(f"[EXTRACT]   - Skills: {len(extracted.get('skills', []))} found")
@@ -116,7 +116,7 @@ async def extract_profile_from_resume(
                 db.add(profile)
                 await db.flush()  # Get the profile in the session
 
-            print(f"[MERGE] Merging extracted data into existing profile...")
+            print("[MERGE] Merging extracted data into existing profile...")
             merged_profile, changed_fields = await profile_service.merge_extracted_profile(profile, extracted)
             await db.commit()
             await db.refresh(merged_profile)

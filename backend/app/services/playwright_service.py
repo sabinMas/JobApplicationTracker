@@ -19,6 +19,7 @@ except ImportError:
     BrowserContext = None
 
 from .websocket_manager import ws_manager
+from . import ai_service
 
 
 # Active sessions: session_id -> session state dict
@@ -134,7 +135,7 @@ async def fill_form(session_id: str, profile: dict) -> list[dict]:
 
     await _broadcast(session_id, "detect_fields", "running", f"Found {len(field_labels)} fields. Mapping with AI...", page)
 
-    field_mapping = await map_form_fields(field_labels, profile)
+    field_mapping = await ai_service.map_form_fields(field_labels, profile)
 
     for label, value in field_mapping.items():
         # Wait if paused

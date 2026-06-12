@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
-from app.models import ScraperRun, Dataset, Actor as ActorModel
+from app.models import ScraperRun, Dataset
 from app.services.actor_framework import actor_registry
 from app.services.actor_runner import enqueue_actor_run
 from pydantic import BaseModel

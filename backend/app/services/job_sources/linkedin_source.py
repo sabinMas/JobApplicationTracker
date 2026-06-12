@@ -7,11 +7,8 @@ Requires OAuth 2.0 credentials (Client ID, Secret).
 
 from typing import List, Optional
 import httpx
-import base64
-from datetime import datetime
 
 from .base import JobSource, JobListing
-from ...logging_config import get_logger
 
 # Defer logger
 _logger = None

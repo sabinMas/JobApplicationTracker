@@ -6,7 +6,6 @@ Runs on a schedule (e.g., every 30 minutes) to:
 3. Track results and failures
 """
 import asyncio
-import json
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession

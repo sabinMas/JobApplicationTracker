@@ -2,7 +2,6 @@
 ATS Platform integrations: Greenhouse, Workday, Lever, Taleo, BambooHR, Ashby, etc.
 Each platform has specific APIs and quirks for automation.
 """
-import json
 import httpx
 from typing import Optional
 
@@ -34,7 +33,7 @@ async def get_lever_jobs(company_handle: str) -> list[dict]:
     """Fetch jobs from a Lever company page."""
     async with httpx.AsyncClient() as client:
         resp = await client.get(
-            f"https://api.lever.co/v0/postings?mode=json",
+            "https://api.lever.co/v0/postings?mode=json",
             params={"org": company_handle},
             timeout=10
         )

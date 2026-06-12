@@ -12,12 +12,10 @@ from datetime import datetime
 import logging
 
 from ..database import get_db
-from ..models import Job, Application, Profile
+from ..models import Job
 from ..services import job_scorer
 from ..schemas import (
     ScoreJobsOut,
-    ScoreJobsRequest,
-    HighScoreFilterRequest,
     ScoringHealthOut,
     HighScoreJobsOut,
     JobByScoreOut,

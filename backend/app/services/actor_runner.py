@@ -1,6 +1,5 @@
 """Run scraper actors and manage execution lifecycle."""
 
-import asyncio
 import json
 import logging
 from datetime import datetime
@@ -10,7 +9,7 @@ from sqlalchemy import select
 import aioboto3
 import httpx
 
-from app.models import ScraperRun, Dataset, Actor as ActorModel
+from app.models import ScraperRun, Dataset
 from app.services.actor_framework import actor_registry
 from app.services.s3_service import s3_service
 

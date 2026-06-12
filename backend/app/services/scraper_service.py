@@ -4,8 +4,6 @@ Job page scraping and Greenhouse public API integration.
 import httpx
 from bs4 import BeautifulSoup
 from datetime import datetime, timezone
-from typing import Optional
-import asyncio
 
 
 HEADERS = {
@@ -47,7 +45,7 @@ async def scrape_job_page(url: str) -> str:
                 text = soup.get_text(separator="\n", strip=True)
 
             # Clean up excessive blank lines
-            lines = [l.strip() for l in text.splitlines() if l.strip()]
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
             return "\n".join(lines)
 
         except Exception as e:

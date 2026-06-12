@@ -10,7 +10,6 @@ This is a stub implementation. API key and configuration will be provided later.
 from typing import List, Optional
 
 from .base import JobSource, JobListing
-from ...logging_config import get_logger
 
 # Defer logger
 _logger = None

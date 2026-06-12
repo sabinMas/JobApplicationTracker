@@ -12,7 +12,6 @@ import feedparser
 import httpx
 
 from .base import JobSource, JobListing
-from ...logging_config import get_logger
 
 # Defer logger creation
 _logger = None

@@ -77,10 +77,6 @@ def _merge_array_field(existing: list, extracted: list, field_name: str, dedup_k
                 item_id = item.get("name", "")
             else:
                 item_id = item
-        else:
-            # For strings (skills)
-            item_id = item.lower() if isinstance(item, str) else item
-
         # Check if already exists
         already_exists = False
         for existing_item in merged:

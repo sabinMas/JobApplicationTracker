@@ -121,7 +121,7 @@ def _build_prompt(job: Job, profile: Optional[Profile], prefs: Optional[SearchPr
             candidate_lines.append(f"Wants to see: {', '.join(prefs.must_have_keywords)}")
 
     user = (
-        f"CANDIDATE:\n" + "\n".join(candidate_lines) + "\n\n"
+        "CANDIDATE:\n" + "\n".join(candidate_lines) + "\n\n"
         f"JOB POSTING:\n"
         f"Title: {job.title}\n"
         f"Company: {job.company}\n"

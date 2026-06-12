@@ -3,7 +3,6 @@ Enhanced automation for fully automated job application submission.
 Handles form detection, filling, and submission across different ATS platforms.
 """
 import asyncio
-from typing import Optional
 
 try:
     from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError

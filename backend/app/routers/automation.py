@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from ..database import get_db
 from ..models import Application, Job, Document, Profile
 from ..schemas import AutomationStartRequest, AutomationSessionOut
-from ..services import playwright_service, ai_service, pdf_service
+from ..services import playwright_service, ai_service
 from ..services.websocket_manager import ws_manager
 
 

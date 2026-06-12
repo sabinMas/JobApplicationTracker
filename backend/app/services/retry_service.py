@@ -22,7 +22,7 @@ def _safe_log(log_func, message: str, extra_fields: dict = None):
     except TypeError:
         # Fallback for standard logger (doesn't support extra_fields)
         if extra_fields:
-            message_with_context = f"{message} | {extra_fields}"
+            message = f"{message} | {extra_fields}"
         log_func(message)
 
 

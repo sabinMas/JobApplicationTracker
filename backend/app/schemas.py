@@ -1,5 +1,5 @@
-from pydantic import BaseModel, HttpUrl
-from typing import Optional, List, Any
+from pydantic import BaseModel
+from typing import Optional, List
 from datetime import datetime
 
 

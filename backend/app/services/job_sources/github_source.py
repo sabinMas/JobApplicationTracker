@@ -8,10 +8,8 @@ For production, consider alternative job sources.
 
 from typing import List, Optional
 import httpx
-from datetime import datetime
 
 from .base import JobSource, JobListing
-from ...logging_config import get_logger
 
 # Defer logger
 _logger = None

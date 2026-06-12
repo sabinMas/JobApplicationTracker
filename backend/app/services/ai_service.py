@@ -83,7 +83,7 @@ async def _bedrock_chat(
     if tool_schema is not None:
         for block in content:
             if "toolUse" in block:
-                logger.debug(f"Bedrock returned structured output successfully")
+                logger.debug("Bedrock returned structured output successfully")
                 return block["toolUse"]["input"]
         raise ValueError("Bedrock response contained no toolUse block")
 
