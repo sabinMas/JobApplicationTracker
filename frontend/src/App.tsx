@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Search, User, Briefcase, Settings2, Workflow } from 'lucide-react'
+import { LayoutDashboard, User, Briefcase, Settings2, Workflow } from 'lucide-react'
 import { Dashboard } from './pages/Dashboard'
-import { JobSearch } from './pages/JobSearch'
 import { ApplicationDetail } from './pages/ApplicationDetail'
 import { ProfilePage } from './pages/Profile'
 import { Onboarding } from './pages/Onboarding'
@@ -10,11 +9,10 @@ import { PipelinePage } from './pages/Pipeline'
 import clsx from 'clsx'
 
 const NAV = [
-  { to: '/',            icon: LayoutDashboard, label: 'Dashboard',    end: true },
-  { to: '/search',      icon: Search,          label: 'Add Job',      end: false },
-  { to: '/pipeline',    icon: Workflow,         label: 'Pipeline',     end: false },
-  { to: '/preferences', icon: Settings2,       label: 'Preferences',  end: false },
-  { to: '/profile',     icon: User,            label: 'Profile',      end: false },
+  { to: '/',            icon: LayoutDashboard, label: 'Dashboard',       end: true },
+  { to: '/pipeline',    icon: Workflow,         label: 'Job Progress',   end: false },
+  { to: '/preferences', icon: Settings2,       label: 'Preferences',    end: false },
+  { to: '/profile',     icon: User,            label: 'Profile',        end: false },
 ]
 
 function AppContent() {
@@ -77,7 +75,6 @@ function AppContent() {
         <div className="p-8 min-h-full">
           <Routes>
             <Route path="/"              element={<Dashboard />} />
-            <Route path="/search"        element={<JobSearch />} />
             <Route path="/jobs/:id"      element={<ApplicationDetail />} />
             <Route path="/pipeline"      element={<PipelinePage />} />
             <Route path="/preferences"   element={<PreferencesPage />} />
