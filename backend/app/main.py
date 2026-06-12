@@ -43,11 +43,23 @@ def _init_actors():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize DB, scheduler, and actors in background without blocking startup
+    # Initialize actors, scheduler, and DB
     global _db_initialized, _job_sync_scheduler
     _init_actors()
+
+    # Initialize scheduler synchronously (job discovery won't work without it)
+    try:
+        logger.info("Initializing job sync scheduler...")
+        job_manager = JobSourceManager()
+        await seed_sources_from_preferences(job_manager)
+        _job_sync_scheduler = JobSyncScheduler(job_manager)
+        set_scheduler(_job_sync_scheduler)
+        logger.info("Job sync scheduler initialized successfully")
+    except Exception as e:
+        logger.error(f"Scheduler init error: {e}", extra_fields={"error": str(e)})
+
+    # Initialize DB in background (non-critical for most endpoints)
     asyncio.create_task(_init_db_background())
-    asyncio.create_task(_init_scheduler_background())
     yield
 
 
@@ -60,24 +72,6 @@ async def _init_db_background():
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"DB init error (will retry on first request): {e}", extra_fields={"error": str(e)})
-
-
-async def _init_scheduler_background():
-    global _job_sync_scheduler
-    try:
-        logger.info("Initializing job sync scheduler...")
-        
-        # Create job manager and seed sources from the user's preferences
-        job_manager = JobSourceManager()
-        await seed_sources_from_preferences(job_manager)
-
-        # Create scheduler
-        _job_sync_scheduler = JobSyncScheduler(job_manager)
-        set_scheduler(_job_sync_scheduler)
-        
-        logger.info("Job sync scheduler initialized successfully")
-    except Exception as e:
-        logger.error(f"Scheduler init error: {e}", extra_fields={"error": str(e)})
 
 
 app = FastAPI(
