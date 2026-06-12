@@ -91,7 +91,7 @@ async def extract_profile_from_resume(
             print(f"[EXTRACT] ERROR saving file: {type(e).__name__}: {str(e)}")
             raise HTTPException(400, f"Failed to save file: {str(e)}")
 
-        # Extract profile using AI (Claude via Bedrock or Cerebras)
+        # Extract profile using AI (Qwen via AWS Bedrock)
         try:
             print(f"[EXTRACT] Parsing resume with Claude...")
             extracted = await resume_extractor.parse_resume(str(file_path))

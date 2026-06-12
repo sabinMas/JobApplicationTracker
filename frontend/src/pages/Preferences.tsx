@@ -41,6 +41,9 @@ export function PreferencesPage() {
       setForm(data)
       qc.invalidateQueries({ queryKey: ['preferences'] })
     },
+    onError: (error: any) => {
+      console.error('AI Suggest failed:', error)
+    },
   })
 
   if (isLoading)

@@ -1,20 +1,18 @@
 """
 Provider-routing AI layer.
 
-Primary provider: AWS Bedrock (Claude) via the async Converse API — paid
-with AWS credits, IAM-authenticated, no API key and no use-case form needed.
-Fallback provider: Cerebras (OpenAI-compatible endpoint).
+Primary provider: AWS Bedrock via async Converse API — paid with AWS credits,
+IAM-authenticated, no API key and no use-case form needed.
 
-Routing is controlled by the AI_PROVIDER env var ("bedrock" | "cerebras",
-default "bedrock"). If the primary provider fails, the call falls back to the
-other provider automatically.
+Model selection (configured via environment):
+- FAST  (extraction, scoring, field mapping):  Qwen3 Coder Next (on-demand throughput)
+- SMART (resume tailoring, cover letters):     Qwen3 Coder 30B (on-demand throughput)
 
-Two model tiers for cost optimization:
-- FAST  (extraction, scoring, field mapping): Claude 3 Haiku (fastest, cheapest)
-- SMART (resume tailoring, cover letters):    Claude 3.5 Sonnet (highest quality)
+Note: Using Qwen models for on-demand throughput. Claude models in this account
+require provisioned throughput (INFERENCE_PROFILE), which is why Qwen was selected.
 
 All high-level AI functions used across the app live here. Service modules
-should import from `ai_service`, not from `cerebras_service`.
+should import from `ai_service`.
 """
 
 import json
@@ -24,22 +22,18 @@ from typing import Any, Optional
 
 import aioboto3
 
-from . import cerebras_service
-
 logger = logging.getLogger(__name__)
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "bedrock")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
-# Claude models via AWS Bedrock — NO gate required, use your AWS credentials
-# Support forced tool-use (structured output) via Bedrock Converse API
+# AWS Bedrock models with on-demand throughput support
 # Two-tier approach for cost optimization:
-# FAST  (extraction, scoring, field mapping): Claude 3.5 Sonnet (fastest, cheapest structured output)
-# SMART (resume tailoring, cover letters):    Claude 3.5 Sonnet (highest quality)
-# Note: Using Claude 3.5 Sonnet for both (best structured output support on Bedrock)
-# If running into Bedrock issues, set AI_PROVIDER=cerebras and use CEREBRAS_API_KEY
-BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "anthropic.claude-3-5-sonnet-20241022-v2:0")
-BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "anthropic.claude-3-5-sonnet-20241022-v2:0")
+# FAST  (extraction, scoring, field mapping): Qwen3 Coder Next
+# SMART (resume tailoring, cover letters):    Qwen3 Coder 30B
+# Note: Using Qwen models because Claude models in this account require provisioned throughput
+BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "qwen.qwen3-coder-next")
+BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "qwen.qwen3-coder-30b-a3b-v1:0")
 
 logger.info(f"AI Provider: {AI_PROVIDER.upper()} | Fast: {BEDROCK_FAST_MODEL} | Smart: {BEDROCK_SMART_MODEL}")
 
@@ -110,20 +104,13 @@ async def chat(
     temperature: float = 0.3,
     tier: str = "fast",
 ) -> str:
-    """Free-text completion routed to the configured provider with fallback."""
+    """Free-text completion via AWS Bedrock."""
     model_id = BEDROCK_SMART_MODEL if tier == "smart" else BEDROCK_FAST_MODEL
-    providers = ["bedrock", "cerebras"] if AI_PROVIDER == "bedrock" else ["cerebras", "bedrock"]
-    last_error: Exception | None = None
-    for provider in providers:
-        try:
-            if provider == "bedrock":
-                return await _bedrock_chat(system, user, temperature, model_id)
-            return await cerebras_service._chat(system, user, temperature)
-        except Exception as e:
-            last_error = e
-            logger.warning(
-                f"AI provider '{provider}' failed, trying next")
-    raise RuntimeError(f"All AI providers failed: {last_error}")
+    try:
+        return await _bedrock_chat(system, user, temperature, model_id)
+    except Exception as e:
+        logger.error(f"Bedrock chat failed: {type(e).__name__}: {str(e)[:200]}")
+        raise
 
 
 async def structured(
@@ -133,40 +120,19 @@ async def structured(
     temperature: float = 0.2,
     tier: str = "fast",
 ) -> dict:
-    """Structured-output completion. Uses Bedrock tool-use when available,
-    falls back to JSON-in-text parsing on Cerebras."""
+    """Structured-output completion via AWS Bedrock with tool-use."""
     model_id = BEDROCK_SMART_MODEL if tier == "smart" else BEDROCK_FAST_MODEL
-    providers = ["bedrock", "cerebras"] if AI_PROVIDER == "bedrock" else ["cerebras", "bedrock"]
-    last_error: Exception | None = None
-    errors: dict[str, str] = {}
-
-    for provider in providers:
-        try:
-            logger.info(f"Trying AI provider: {provider} (tier={tier}, model={model_id if provider == 'bedrock' else 'cerebras'})")
-            if provider == "bedrock":
-                result = await _bedrock_chat(
-                    system, user, temperature, model_id, tool_schema=schema
-                )
-                assert isinstance(result, dict)
-                logger.info(f"✓ Bedrock succeeded")
-                return result
-            text = await cerebras_service._chat(
-                system + " Return ONLY valid JSON matching the requested structure.",
-                user,
-                temperature,
-            )
-            result = _parse_json_text(text)
-            logger.info(f"✓ Cerebras succeeded")
-            return result
-        except Exception as e:
-            last_error = e
-            error_msg = f"{type(e).__name__}: {str(e)[:200]}"
-            errors[provider] = error_msg
-            logger.warning(
-                f"AI provider '{provider}' failed: {error_msg}, trying next...")
-
-    error_detail = "; ".join(f"{k}={v}" for k, v in errors.items())
-    raise RuntimeError(f"All AI providers failed — {error_detail}")
+    try:
+        logger.info(f"Bedrock structured call: model={model_id}, tier={tier}")
+        result = await _bedrock_chat(
+            system, user, temperature, model_id, tool_schema=schema
+        )
+        assert isinstance(result, dict)
+        logger.info(f"Bedrock structured succeeded")
+        return result
+    except Exception as e:
+        logger.error(f"Bedrock structured failed: {type(e).__name__}: {str(e)[:200]}")
+        raise
 
 
 # ─── High-level functions (the app-facing API) ───────────────────────────────
