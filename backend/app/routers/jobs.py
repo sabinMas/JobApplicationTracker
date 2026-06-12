@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 job_manager = JobSourceManager()
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_jobs(
     skip: int = 0,
