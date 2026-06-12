@@ -58,11 +58,20 @@ def _init_actors():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize actors, scheduler, and DB
+    # Initialize actors and DB first
     global _db_initialized, _job_sync_scheduler
     _init_actors()
 
-    # Initialize scheduler synchronously (job discovery won't work without it)
+    # Initialize DB before scheduler (scheduler needs DB for preferences)
+    try:
+        logger.info("Initializing database...")
+        await init_db()
+        _db_initialized = True
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"DB init error: {e}", extra_fields={"error": str(e)})
+
+    # Initialize scheduler after DB is ready
     try:
         logger.info("Initializing job sync scheduler...")
         job_manager = JobSourceManager()
@@ -73,23 +82,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Scheduler init error: {e}", extra_fields={"error": str(e)})
 
-    # Initialize DB in background (non-critical for most endpoints)
-    asyncio.create_task(_init_db_background())
     yield
-
-
-async def _init_db_background():
-    global _db_initialized
-    try:
-        logger.info("Initializing database...")
-        await init_db()
-        _db_initialized = True
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(
-            f"DB init error (will retry on first request): {e}",
-            extra_fields={"error": str(e)},
-        )
 
 
 app = FastAPI(
