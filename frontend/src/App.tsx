@@ -40,7 +40,7 @@ function AppContent() {
           </div>
           <div>
             <p className="font-bold text-gray-800 text-sm leading-tight">JobTracker</p>
-            <p className="text-[10px] text-brand-700">Powered by Cerebras AI</p>
+            <p className="text-[10px] text-brand-700">Powered by Claude AI</p>
           </div>
         </div>
 
@@ -67,8 +67,7 @@ function AppContent() {
         {/* Footer */}
         <div className="px-5 py-4 border-t border-parchment-300">
           <p className="text-[10px] text-gray-600 leading-relaxed">
-            AI-powered job automation.
-            <br />Bedrock + Lambda + ECS.
+            Find, score & apply to jobs with AI-tailored resumes.
           </p>
         </div>
       </aside>
