@@ -4,6 +4,8 @@ from sqlalchemy import select
 import shutil
 from pathlib import Path
 import os
+import time
+import unicodedata
 
 from ..database import get_db
 from ..models import Profile, Document, SearchPreferences
@@ -18,6 +20,18 @@ from ..services import ai_service, pdf_service, resume_extractor, profile_servic
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp/data" if os.getenv("AWS_LAMBDA_FUNCTION_NAME") else str(Path(__file__).parent.parent.parent.parent / "data")))
+
+
+def _sanitize_filename(filename: str) -> str:
+    """Remove or replace Unicode characters that Windows can't handle."""
+    # Normalize unicode (NFD decomposition)
+    filename = unicodedata.normalize('NFKD', filename)
+    # Keep only ASCII letters, digits, and safe punctuation
+    filename = ''.join(c for c in filename if c.isascii() and (c.isalnum() or c in '._- '))
+    # If filename becomes empty, use timestamp-based name
+    if not filename or filename.startswith('.'):
+        filename = f"resume_{int(time.time())}.pdf"
+    return filename
 
 
 @router.get("", response_model=ProfileOut)
@@ -61,15 +75,20 @@ async def extract_profile_from_resume(
 
         save_dir = DATA_DIR / "documents" / "resumes"
         save_dir.mkdir(parents=True, exist_ok=True)
-        file_path = save_dir / file.filename
+
+        # Sanitize filename to avoid Unicode issues on Windows
+        safe_filename = unicodedata.normalize('NFKD', file.filename).encode('ascii', 'ignore').decode('ascii')
+        if not safe_filename:
+            safe_filename = f"resume_{int(time.time())}.pdf"
+        file_path = save_dir / safe_filename
 
         # Save file
         try:
             with open(file_path, "wb") as f:
                 shutil.copyfileobj(file.file, f)
-            print(f"✓ File saved to: {file_path}")
+            print(f"[EXTRACT] File saved to: {file_path}")
         except Exception as e:
-            print(f"ERROR saving file: {type(e).__name__}: {str(e)}")
+            print(f"[EXTRACT] ERROR saving file: {type(e).__name__}: {str(e)}")
             raise HTTPException(400, f"Failed to save file: {str(e)}")
 
         # Extract profile using AI (Claude via Bedrock or Cerebras)
@@ -77,14 +96,14 @@ async def extract_profile_from_resume(
             print(f"[EXTRACT] Parsing resume with Claude...")
             extracted = await resume_extractor.parse_resume(str(file_path))
             if not extracted:
-                print(f"[EXTRACT] ⚠️  AI returned empty profile - user can fill in manually")
+                print(f"[EXTRACT] AI returned empty profile - user can fill in manually")
             else:
-                print(f"[EXTRACT] ✓ Profile extracted: {extracted.get('full_name', 'Unknown')}")
+                print(f"[EXTRACT] Profile extracted: {extracted.get('full_name', 'Unknown')}")
                 print(f"[EXTRACT]   - Skills: {len(extracted.get('skills', []))} found")
                 print(f"[EXTRACT]   - Experience: {len(extracted.get('experience', []))} entries")
                 print(f"[EXTRACT]   - Education: {len(extracted.get('education', []))} entries")
         except Exception as e:
-            print(f"[EXTRACT] ✗ AI extraction failed: {type(e).__name__}: {str(e)}")
+            print(f"[EXTRACT] AI extraction failed: {type(e).__name__}: {str(e)}")
             print(f"[EXTRACT] Continuing with empty profile - user can fill in manually")
             extracted = {}
 
@@ -101,9 +120,9 @@ async def extract_profile_from_resume(
             merged_profile, changed_fields = await profile_service.merge_extracted_profile(profile, extracted)
             await db.commit()
             await db.refresh(merged_profile)
-            print(f"[MERGE] ✓ Profile merged: {len(changed_fields)} fields updated: {changed_fields}")
+            print(f"[MERGE] Profile merged: {len(changed_fields)} fields updated: {changed_fields}")
         except Exception as e:
-            print(f"[MERGE] ✗ Profile merge failed: {type(e).__name__}: {str(e)}")
+            print(f"[MERGE] Profile merge failed: {type(e).__name__}: {str(e)}")
             print(f"[MERGE] Continuing - extracted data will be returned for manual review")
             merged_profile = None
             changed_fields = []
@@ -115,15 +134,15 @@ async def extract_profile_from_resume(
             doc = Document(
                 type="resume",
                 variant="base",
-                filename=file.filename,
+                filename=safe_filename,
                 file_path=str(file_path),
                 content_text=text,
             )
             db.add(doc)
             await db.commit()
-            print(f"✓ Document saved to DB with ID: {doc.id}")
+            print(f"[EXTRACT] Document saved to DB with ID: {doc.id}")
         except Exception as e:
-            print(f"ERROR saving document to DB: {type(e).__name__}: {str(e)}")
+            print(f"[EXTRACT] ERROR saving document to DB: {type(e).__name__}: {str(e)}")
             raise HTTPException(500, f"Failed to save document: {str(e)}")
 
         return {
