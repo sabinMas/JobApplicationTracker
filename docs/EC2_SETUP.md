@@ -14,8 +14,8 @@ Replaces ECS Fargate. Simpler: pushes to master auto-deploy via SSH.
      | Type | Port | Source |
      |------|------|--------|
      | SSH  | 22   | My IP  |
-     | Custom TCP | 8000 | Anywhere (0.0.0.0/0) |
-     | HTTP | 80   | Anywhere |
+     | HTTP | 80   | Anywhere (0.0.0.0/0) |
+     | HTTPS | 443 | Anywhere (0.0.0.0/0) |
    - **Storage**: 20 GB gp3 (default is fine)
 3. Click **Launch Instance**
 4. Note the **Public IPv4 address** once it starts
@@ -76,10 +76,12 @@ The EC2 instance needs to reach RDS. In AWS Console:
 In **Vercel Dashboard → Project → Settings → Environment Variables**:
 
 ```
-VITE_API_URL = http://<YOUR-EC2-PUBLIC-IP>:8000
+VITE_API_URL = https://<YOUR-EC2-PUBLIC-IP>
 ```
 
-Redeploy the frontend from the Vercel dashboard.
+Note: use `https://` with **no port** — nginx handles SSL on port 443.
+
+Redeploy the frontend from the Vercel dashboard after saving.
 
 ## Step 7 — Wire Up GitHub Actions CD
 
@@ -89,6 +91,7 @@ Add these secrets in **GitHub → Settings → Secrets → Actions**:
 |--------|-------|
 | `EC2_HOST` | Your EC2 public IP (e.g. `54.123.45.67`) |
 | `EC2_SSH_KEY` | Contents of the `.pem` file (the whole thing including `-----BEGIN...`) |
+| `VITE_API_URL` | `https://<YOUR-EC2-PUBLIC-IP>` (used by CI frontend build) |
 
 From now on, every push to `master` that passes CI will automatically SSH into EC2 and deploy.
 
