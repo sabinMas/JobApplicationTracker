@@ -101,6 +101,7 @@ app = FastAPI(
     title="Job Application Tracker API",
     version="1.0.0",
     lifespan=lifespan,
+    redirect_slashes=False,  # Prevent 307 redirects that strip CORS headers
 )
 
 # CORS configuration — explicit origins + regex for Vercel preview deploys
