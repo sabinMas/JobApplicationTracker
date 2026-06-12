@@ -38,11 +38,12 @@ export function PreferencesPage() {
   const seedMutation = useMutation({
     mutationFn: seedPreferences,
     onSuccess: (data) => {
+      console.log('AI Suggest succeeded, updating form with:', data)
       setForm(data)
       qc.invalidateQueries({ queryKey: ['preferences'] })
     },
     onError: (error: any) => {
-      console.error('AI Suggest failed:', error)
+      console.error('AI Suggest failed:', error?.response?.data || error?.message || error)
     },
   })
 
