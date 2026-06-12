@@ -34,9 +34,11 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 # Claude models via AWS Bedrock — NO gate required, use your AWS credentials
 # Support forced tool-use (structured output) via Bedrock Converse API
 # Two-tier approach for cost optimization:
-# FAST  (extraction, scoring, field mapping): Claude 3 Haiku (~fastest, cheapest)
-# SMART (resume tailoring, cover letters):    Claude 3.5 Sonnet (~highest quality)
-BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "anthropic.claude-3-haiku-20240307-v1:0")
+# FAST  (extraction, scoring, field mapping): Claude 3.5 Sonnet (fastest, cheapest structured output)
+# SMART (resume tailoring, cover letters):    Claude 3.5 Sonnet (highest quality)
+# Note: Using Claude 3.5 Sonnet for both (best structured output support on Bedrock)
+# If running into Bedrock issues, set AI_PROVIDER=cerebras and use CEREBRAS_API_KEY
+BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "anthropic.claude-3-5-sonnet-20241022-v2:0")
 BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "anthropic.claude-3-5-sonnet-20241022-v2:0")
 
 logger.info(f"AI Provider: {AI_PROVIDER.upper()} | Fast: {BEDROCK_FAST_MODEL} | Smart: {BEDROCK_SMART_MODEL}")
