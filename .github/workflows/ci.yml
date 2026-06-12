@@ -106,3 +106,25 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: [backend-lint, backend-test, frontend-build, secrets-scan]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd /opt/jobtracker
+            git pull origin master
+            ./backend/venv/bin/pip install -r backend/requirements.txt -q
+            sudo systemctl restart jobtracker
+            sleep 3
+            systemctl is-active jobtracker && echo "Service running OK" || (journalctl -u jobtracker -n 20 --no-pager && exit 1)
