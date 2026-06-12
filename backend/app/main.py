@@ -89,7 +89,9 @@ async def lifespan(app: FastAPI):
             extra_fields={"sources": len(job_manager.sources)},
         )
     except Exception as e:
-        logger.error(f"Critical scheduler init error: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Critical scheduler init error: {e}", extra_fields={"error": str(e)}
+        )
         raise  # Fail startup if scheduler creation itself fails
 
     yield
