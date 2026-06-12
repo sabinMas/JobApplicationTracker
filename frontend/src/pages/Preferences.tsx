@@ -20,6 +20,7 @@ export function PreferencesPage() {
   const [form, setForm] = useState<Partial<SearchPreferences>>({})
   const [saved, setSaved] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [seedError, setSeedError] = useState<string | null>(null)
 
   useEffect(() => {
     if (prefs) setForm(prefs)
@@ -40,10 +41,13 @@ export function PreferencesPage() {
     onSuccess: (data) => {
       console.log('AI Suggest succeeded, updating form with:', data)
       setForm(data)
+      setSeedError(null)
       qc.invalidateQueries({ queryKey: ['preferences'] })
     },
     onError: (error: any) => {
-      console.error('AI Suggest failed:', error?.response?.data || error?.message || error)
+      const errorMsg = error?.response?.data?.detail || error?.message || 'Failed to generate suggestions'
+      console.error('AI Suggest failed:', errorMsg)
+      setSeedError(errorMsg)
     },
   })
 
@@ -67,6 +71,9 @@ export function PreferencesPage() {
             <p className="text-xs text-gray-500 mt-2">
               Last updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
             </p>
+          )}
+          {seedError && (
+            <p className="text-xs text-red-600 mt-2">Error: {seedError}</p>
           )}
         </div>
         <div className="flex gap-2">
