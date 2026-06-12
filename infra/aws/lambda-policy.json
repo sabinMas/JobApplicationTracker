@@ -39,6 +39,15 @@
         "ec2:DeleteNetworkInterface"
       ],
       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:GetFoundationModel",
+        "bedrock-runtime:InvokeModel"
+      ],
+      "Resource": "*"
     }
   ]
 }
