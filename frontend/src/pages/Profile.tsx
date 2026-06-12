@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save, Plus, Trash2, Loader2, CheckCircle, FileText, Clock } from 'lucide-react'
+import { Save, Plus, Trash2, Loader2, CheckCircle, FileText, Clock, ArrowRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { getProfile, updateProfile, Profile, getDocuments, deleteDocument, extractProfileFromResume } from '../api/client'
 import { DocumentUpload } from '../components/DocumentUpload'
 import { formatDistanceToNow } from 'date-fns'
 
 export function ProfilePage() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { data: profile, isLoading } = useQuery({ queryKey: ['profile'], queryFn: getProfile })
   const { data: documents = [] } = useQuery({ queryKey: ['documents'], queryFn: getDocuments })
   const [form, setForm] = useState<Profile>({})
   const [saved, setSaved] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [skillInput, setSkillInput] = useState('')
 
   useEffect(() => {
@@ -22,7 +25,8 @@ export function ProfilePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['profile'] })
       setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      setLastUpdated(new Date())
+      setTimeout(() => setSaved(false), 5000)
     },
   })
 
@@ -50,6 +54,11 @@ export function ProfilePage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Profile & Documents</h1>
           <p className="text-gray-600 text-sm mt-1">Your info powers AI tailoring, scoring, and form autofill</p>
+          {lastUpdated && (
+            <p className="text-xs text-gray-500 mt-2">
+              Last updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+            </p>
+          )}
         </div>
         <button
           className="btn-primary flex items-center gap-2"
@@ -293,6 +302,18 @@ export function ProfilePage() {
           </div>
         </div>
       )}
+
+      {/* Guidance footer */}
+      <div className="border-t border-parchment-300 pt-6 mt-8">
+        <p className="text-sm text-gray-600 mb-3">✓ Profile set up. Ready to find jobs?</p>
+        <button
+          onClick={() => navigate('/preferences')}
+          className="btn-primary flex items-center gap-2 w-full sm:w-auto"
+        >
+          Set Preferences
+          <ArrowRight size={16} />
+        </button>
+      </div>
     </div>
   )
 }
@@ -365,7 +386,7 @@ function ResumeExtractUpload({ onExtracted }: { onExtracted: (data: Partial<Prof
         setChanges([])
         onExtracted({})
       }
-      setTimeout(() => setStatus('idle'), 5000)
+      setTimeout(() => setStatus('idle'), 8000)
     } catch (error) {
       setStatus('error')
       setMessage('Upload failed. Check file format and try again.')
