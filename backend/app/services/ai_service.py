@@ -128,7 +128,7 @@ async def structured(
             system, user, temperature, model_id, tool_schema=schema
         )
         assert isinstance(result, dict)
-        logger.info(f"Bedrock structured succeeded")
+        logger.info("Bedrock structured succeeded")
         return result
     except Exception as e:
         logger.error(f"Bedrock structured failed: {type(e).__name__}: {str(e)[:200]}")
@@ -254,7 +254,7 @@ async def extract_profile(resume_text: str) -> dict:
         return result
     except Exception as e:
         logger.error(f"✗ extract_profile failed: {type(e).__name__}: {str(e)}", exc_info=True)
-        logger.warning(f"Falling back to returning empty profile (user can fill in manually)")
+        logger.warning("Falling back to returning empty profile (user can fill in manually)")
         return {}
 
 

@@ -79,7 +79,7 @@ async def fetch_greenhouse_jobs(company_slug: str) -> list[dict]:
                     "scraped_at": datetime.now(timezone.utc).isoformat(),
                 })
             return jobs
-        except Exception as e:
+        except Exception:
             return []
 
 

@@ -104,7 +104,7 @@ async def extract_profile_from_resume(
                 print(f"[EXTRACT]   - Education: {len(extracted.get('education', []))} entries")
         except Exception as e:
             print(f"[EXTRACT] AI extraction failed: {type(e).__name__}: {str(e)}")
-            print(f"[EXTRACT] Continuing with empty profile - user can fill in manually")
+            print("[EXTRACT] Continuing with empty profile - user can fill in manually")
             extracted = {}
 
         # Merge extracted data with existing profile
@@ -123,7 +123,7 @@ async def extract_profile_from_resume(
             print(f"[MERGE] Profile merged: {len(changed_fields)} fields updated: {changed_fields}")
         except Exception as e:
             print(f"[MERGE] Profile merge failed: {type(e).__name__}: {str(e)}")
-            print(f"[MERGE] Continuing - extracted data will be returned for manual review")
+            print("[MERGE] Continuing - extracted data will be returned for manual review")
             merged_profile = None
             changed_fields = []
 

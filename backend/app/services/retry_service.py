@@ -5,9 +5,12 @@ Provides intelligent retry strategies for transient vs. permanent errors.
 """
 
 import asyncio
+import logging
 from enum import Enum
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Any, Tuple
+
+logger = logging.getLogger(__name__)
 
 def _safe_log(log_func, message: str, extra_fields: dict = None):
     """Safely call log function, handling both StructuredLogger and standard Logger."""
@@ -51,7 +54,6 @@ async def should_retry(
         return False, 0
 
     error_str = str(error).lower()
-    error_type = type(error).__name__
 
     # Don't retry validation/auth errors (permanent)
     if isinstance(error, ValueError):

@@ -13,7 +13,7 @@ except ImportError:
     Page = None
     PlaywrightTimeoutError = Exception
 
-from .ats_integration import detect_ats_from_url, get_submit_button_selectors, get_form_field_selectors
+from .ats_integration import get_submit_button_selectors, get_form_field_selectors
 
 
 async def detect_and_fill_required_fields(
