@@ -74,12 +74,23 @@ async def lifespan(app: FastAPI):
     try:
         logger.info("Initializing job sync scheduler...")
         job_manager = JobSourceManager()
-        await seed_sources_from_preferences(job_manager)
+        try:
+            await seed_sources_from_preferences(job_manager)
+        except Exception as e:
+            logger.warning(
+                f"Could not seed job sources from preferences: {e}",
+                extra_fields={"error": str(e)},
+            )
+        # Always create scheduler, even if seeding failed (sources can be empty initially)
         _job_sync_scheduler = JobSyncScheduler(job_manager)
         set_scheduler(_job_sync_scheduler)
-        logger.info("Job sync scheduler initialized successfully")
+        logger.info(
+            "Job sync scheduler initialized",
+            extra_fields={"sources": len(job_manager.sources)},
+        )
     except Exception as e:
-        logger.error(f"Scheduler init error: {e}", extra_fields={"error": str(e)})
+        logger.error(f"Critical scheduler init error: {e}", extra_fields={"error": str(e)})
+        raise  # Fail startup if scheduler creation itself fails
 
     yield
 
