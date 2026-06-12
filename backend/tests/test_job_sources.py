@@ -9,7 +9,7 @@ import sys
 import os
 import asyncio
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.logging_config import setup_logging, get_logger
 from app.services.job_sources import JobSourceManager, RSSJobSource, JobListing
