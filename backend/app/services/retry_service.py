@@ -206,14 +206,14 @@ class RetryableOperation:
             return False  # Don't suppress exception
 
         # Exception occurred
-        should_retry, wait_time = await should_retry(exc_val, self.attempt - 1, self.max_attempts)
+        should_retry_flag, wait_time = await should_retry(exc_val, self.attempt - 1, self.max_attempts)
         self.errors.append({
             "attempt": self.attempt,
             "error": str(exc_val)[:200],
             "error_type": type(exc_val).__name__,
         })
 
-        if not should_retry or self.attempt >= self.max_attempts:
+        if not should_retry_flag or self.attempt >= self.max_attempts:
             logger.error(
                 f"{self.operation_name} failed permanently",
                 extra_fields={
