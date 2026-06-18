@@ -17,7 +17,9 @@ def _is_empty_string(value: Optional[str]) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
 
-def _merge_string_field(existing: Optional[str], extracted: Optional[str], field_name: str) -> tuple[Optional[str], bool]:
+def _merge_string_field(
+    existing: Optional[str], extracted: Optional[str], field_name: str
+) -> tuple[Optional[str], bool]:
     """
     Merge a single string field.
 
@@ -39,7 +41,9 @@ def _merge_string_field(existing: Optional[str], extracted: Optional[str], field
     return None, False
 
 
-def _merge_array_field(existing: list, extracted: list, field_name: str, dedup_key: str = "name") -> tuple[list, bool]:
+def _merge_array_field(
+    existing: list, extracted: list, field_name: str, dedup_key: str = "name"
+) -> tuple[list, bool]:
     """
     Merge array field (skills, experience, education, certifications).
 
@@ -64,39 +68,33 @@ def _merge_array_field(existing: list, extracted: list, field_name: str, dedup_k
     changed = False
 
     for item in extracted:
-        # Extract identifier based on field type
-        if isinstance(item, dict):
-            # For dicts (experience, education, certifications)
-            if field_name == "skills":
-                item_id = item
-            elif field_name == "experience":
-                item_id = (item.get("company", ""), item.get("title", ""))
-            elif field_name == "education":
-                item_id = (item.get("school", ""), item.get("degree", ""))
-            elif field_name == "certifications":
-                item_id = item.get("name", "")
-            else:
-                item_id = item
-        else:
-            # For strings (skills)
-            item_id = item.lower() if isinstance(item, str) else item
-
         # Check if already exists
         already_exists = False
         for existing_item in merged:
             if isinstance(existing_item, dict) and isinstance(item, dict):
                 if field_name == "experience":
-                    if (existing_item.get("company", "").lower() == item.get("company", "").lower() and
-                        existing_item.get("title", "").lower() == item.get("title", "").lower()):
+                    if (
+                        existing_item.get("company", "").lower()
+                        == item.get("company", "").lower()
+                        and existing_item.get("title", "").lower()
+                        == item.get("title", "").lower()
+                    ):
                         already_exists = True
                         break
                 elif field_name == "education":
-                    if (existing_item.get("school", "").lower() == item.get("school", "").lower() and
-                        existing_item.get("degree", "").lower() == item.get("degree", "").lower()):
+                    if (
+                        existing_item.get("school", "").lower()
+                        == item.get("school", "").lower()
+                        and existing_item.get("degree", "").lower()
+                        == item.get("degree", "").lower()
+                    ):
                         already_exists = True
                         break
                 elif field_name == "certifications":
-                    if existing_item.get("name", "").lower() == item.get("name", "").lower():
+                    if (
+                        existing_item.get("name", "").lower()
+                        == item.get("name", "").lower()
+                    ):
                         already_exists = True
                         break
             elif isinstance(existing_item, str) and isinstance(item, str):
@@ -112,7 +110,9 @@ def _merge_array_field(existing: list, extracted: list, field_name: str, dedup_k
     return merged, changed
 
 
-async def merge_extracted_profile(existing_profile: Profile, extracted_data: dict) -> tuple[Profile, list[str]]:
+async def merge_extracted_profile(
+    existing_profile: Profile, extracted_data: dict
+) -> tuple[Profile, list[str]]:
     """
     Intelligently merge extracted resume data with existing profile.
 
@@ -135,7 +135,16 @@ async def merge_extracted_profile(existing_profile: Profile, extracted_data: dic
     changed_fields = []
 
     # String fields
-    for field in ["full_name", "email", "phone", "location", "summary", "linkedin_url", "github_url", "portfolio_url"]:
+    for field in [
+        "full_name",
+        "email",
+        "phone",
+        "location",
+        "summary",
+        "linkedin_url",
+        "github_url",
+        "portfolio_url",
+    ]:
         existing_val = getattr(existing_profile, field, None)
         extracted_val = extracted_data.get(field)
 
@@ -154,5 +163,7 @@ async def merge_extracted_profile(existing_profile: Profile, extracted_data: dic
             setattr(existing_profile, field, merged_val)
             changed_fields.append(field)
 
-    logger.info(f"Profile merge complete: {len(changed_fields)} fields changed: {changed_fields}")
+    logger.info(
+        f"Profile merge complete: {len(changed_fields)} fields changed: {changed_fields}"
+    )
     return existing_profile, changed_fields

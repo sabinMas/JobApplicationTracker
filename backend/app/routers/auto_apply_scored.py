@@ -12,12 +12,10 @@ from datetime import datetime
 import logging
 
 from ..database import get_db
-from ..models import Job, Application, Profile
+from ..models import Job
 from ..services import job_scorer
 from ..schemas import (
     ScoreJobsOut,
-    ScoreJobsRequest,
-    HighScoreFilterRequest,
     ScoringHealthOut,
     HighScoreJobsOut,
     JobByScoreOut,
@@ -49,7 +47,12 @@ async def score_all_jobs(
     """
     try:
         # Get unscored jobs
-        query = select(Job).where(Job.score.is_(None)).order_by(Job.created_at.desc()).limit(limit)
+        query = (
+            select(Job)
+            .where(Job.score.is_(None))
+            .order_by(Job.created_at.desc())
+            .limit(limit)
+        )
 
         if min_date:
             try:
@@ -57,7 +60,8 @@ async def score_all_jobs(
                 query = query.where(Job.created_at >= min_datetime)
             except ValueError:
                 raise HTTPException(
-                    status_code=400, detail="Invalid date format. Use ISO format (YYYY-MM-DD)"
+                    status_code=400,
+                    detail="Invalid date format. Use ISO format (YYYY-MM-DD)",
                 )
 
         result = await db.execute(query)
@@ -74,7 +78,9 @@ async def score_all_jobs(
                 avg_score=None,
             )
 
-        logger.info(f"Found {len(jobs)} unscored jobs to score", extra={"count": len(jobs)})
+        logger.info(
+            f"Found {len(jobs)} unscored jobs to score", extra={"count": len(jobs)}
+        )
 
         scores = []
         errors = 0
@@ -182,7 +188,8 @@ async def get_high_score_jobs(
 
     except Exception as e:
         logger.error(
-            "Error filtering high-score jobs", extra={"error": str(e), "min_score": min_score}
+            "Error filtering high-score jobs",
+            extra={"error": str(e), "min_score": min_score},
         )
         raise HTTPException(status_code=500, detail="Failed to filter jobs")
 
@@ -221,9 +228,7 @@ async def get_scoring_stats(
         avg_score = float(avg_result.scalar() or 0)
 
         # Score distribution
-        high_result = await db.execute(
-            select(func.count(Job.id)).where(Job.score >= 8)
-        )
+        high_result = await db.execute(select(func.count(Job.id)).where(Job.score >= 8))
         high_score = high_result.scalar() or 0
 
         medium_result = await db.execute(
@@ -231,9 +236,7 @@ async def get_scoring_stats(
         )
         medium_score = medium_result.scalar() or 0
 
-        low_result = await db.execute(
-            select(func.count(Job.id)).where(Job.score < 5)
-        )
+        low_result = await db.execute(select(func.count(Job.id)).where(Job.score < 5))
         low_score = low_result.scalar() or 0
 
         unscored_jobs = total_jobs - scored_jobs
@@ -257,4 +260,6 @@ async def get_scoring_stats(
 
     except Exception as e:
         logger.error("Error getting scoring statistics", extra={"error": str(e)})
-        raise HTTPException(status_code=500, detail="Failed to retrieve scoring statistics")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve scoring statistics"
+        )

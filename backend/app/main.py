@@ -1,12 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import asyncio
 import os
 
 from .logging_config import setup_logging, get_logger
 from .database import init_db
-from .routers import jobs, applications, profile, documents, ai, automation, auto_apply, scheduler, metrics, dashboard, auto_apply_scored, scraper, job_enrichment
+from .routers import (
+    jobs,
+    applications,
+    profile,
+    documents,
+    ai,
+    automation,
+    auto_apply,
+    scheduler,
+    metrics,
+    dashboard,
+    auto_apply_scored,
+    scraper,
+    job_enrichment,
+)
 from .services.job_sources import JobSourceManager
 from .services.job_sync_scheduler import (
     JobSyncScheduler,
@@ -28,6 +41,7 @@ logger = get_logger(__name__)
 _db_initialized = False
 _job_sync_scheduler = None
 
+
 def _init_actors():
     """Register all available actors."""
     try:
@@ -43,47 +57,51 @@ def _init_actors():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize DB, scheduler, and actors in background without blocking startup
+    # Initialize actors and DB first
     global _db_initialized, _job_sync_scheduler
     _init_actors()
-    asyncio.create_task(_init_db_background())
-    asyncio.create_task(_init_scheduler_background())
-    yield
 
-
-async def _init_db_background():
-    global _db_initialized
+    # Initialize DB before scheduler (scheduler needs DB for preferences)
     try:
         logger.info("Initializing database...")
         await init_db()
         _db_initialized = True
         logger.info("Database initialized successfully")
     except Exception as e:
-        logger.error(f"DB init error (will retry on first request): {e}", extra_fields={"error": str(e)})
+        logger.error(f"DB init error: {e}", extra_fields={"error": str(e)})
 
-
-async def _init_scheduler_background():
-    global _job_sync_scheduler
+    # Initialize scheduler after DB is ready
     try:
         logger.info("Initializing job sync scheduler...")
-        
-        # Create job manager and seed sources from the user's preferences
         job_manager = JobSourceManager()
-        await seed_sources_from_preferences(job_manager)
-
-        # Create scheduler
+        try:
+            await seed_sources_from_preferences(job_manager)
+        except Exception as e:
+            logger.warning(
+                f"Could not seed job sources from preferences: {e}",
+                extra_fields={"error": str(e)},
+            )
+        # Always create scheduler, even if seeding failed (sources can be empty initially)
         _job_sync_scheduler = JobSyncScheduler(job_manager)
         set_scheduler(_job_sync_scheduler)
-        
-        logger.info("Job sync scheduler initialized successfully")
+        logger.info(
+            "Job sync scheduler initialized",
+            extra_fields={"sources": len(job_manager.sources)},
+        )
     except Exception as e:
-        logger.error(f"Scheduler init error: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Critical scheduler init error: {e}", extra_fields={"error": str(e)}
+        )
+        raise  # Fail startup if scheduler creation itself fails
+
+    yield
 
 
 app = FastAPI(
     title="Job Application Tracker API",
     version="1.0.0",
     lifespan=lifespan,
+    redirect_slashes=False,  # Prevent 307 redirects that strip CORS headers
 )
 
 # CORS configuration — explicit origins + regex for Vercel preview deploys
@@ -125,4 +143,8 @@ app.include_router(job_enrichment.router)  # Phase 5: Job enrichment pipeline
 @app.get("/health")
 async def health():
     logger.debug("Health check called")
-    return {"status": "ok", "service": "JobApplicationTracker", "db_initialized": _db_initialized}
+    return {
+        "status": "ok",
+        "service": "JobApplicationTracker",
+        "db_initialized": _db_initialized,
+    }

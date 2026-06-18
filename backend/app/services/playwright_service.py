@@ -2,6 +2,7 @@
 Playwright-based browser automation for job application form filling.
 Runs in headed (visible) Chromium so the user can watch and intervene.
 """
+
 import asyncio
 import base64
 import uuid
@@ -11,6 +12,7 @@ from typing import Dict, Optional
 
 try:
     from playwright.async_api import async_playwright, Page, Browser, BrowserContext
+
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
@@ -19,13 +21,16 @@ except ImportError:
     BrowserContext = None
 
 from .websocket_manager import ws_manager
+from . import ai_service
 
 
 # Active sessions: session_id -> session state dict
 _sessions: Dict[str, dict] = {}
 
 
-async def _broadcast(session_id: str, step: str, status: str, message: str, page: Optional[Page] = None):
+async def _broadcast(
+    session_id: str, step: str, status: str, message: str, page: Optional[Page] = None
+):
     event = {
         "session_id": session_id,
         "step": step,
@@ -125,16 +130,26 @@ async def fill_form(session_id: str, profile: dict) -> list[dict]:
     page: Page = session["page"]
     log = []
 
-    await _broadcast(session_id, "detect_fields", "running", "Detecting form fields...", page)
+    await _broadcast(
+        session_id, "detect_fields", "running", "Detecting form fields...", page
+    )
 
     field_labels = await get_form_fields(session_id)
     if not field_labels:
-        await _broadcast(session_id, "detect_fields", "error", "No form fields detected.", page)
+        await _broadcast(
+            session_id, "detect_fields", "error", "No form fields detected.", page
+        )
         return log
 
-    await _broadcast(session_id, "detect_fields", "running", f"Found {len(field_labels)} fields. Mapping with AI...", page)
+    await _broadcast(
+        session_id,
+        "detect_fields",
+        "running",
+        f"Found {len(field_labels)} fields. Mapping with AI...",
+        page,
+    )
 
-    field_mapping = await map_form_fields(field_labels, profile)
+    field_mapping = await ai_service.map_form_fields(field_labels, profile)
 
     for label, value in field_mapping.items():
         # Wait if paused
@@ -172,7 +187,9 @@ async def fill_form(session_id: str, profile: dict) -> list[dict]:
                 }
                 log.append(entry)
                 session["log"].append(entry)
-                await _broadcast(session_id, "fill_field", "running", f"✓ Filled: {label}", page)
+                await _broadcast(
+                    session_id, "fill_field", "running", f"✓ Filled: {label}", page
+                )
                 await asyncio.sleep(0.3)  # brief human-like pause between fields
 
         except Exception as e:
@@ -185,7 +202,13 @@ async def fill_form(session_id: str, profile: dict) -> list[dict]:
             log.append(entry)
             session["log"].append(entry)
 
-    await _broadcast(session_id, "fill_form", "running", "Form filling complete. Review before submitting.", page)
+    await _broadcast(
+        session_id,
+        "fill_form",
+        "running",
+        "Form filling complete. Review before submitting.",
+        page,
+    )
     return log
 
 
@@ -203,7 +226,13 @@ async def upload_documents(
 
     file_inputs = await page.query_selector_all("input[type='file']")
     if not file_inputs:
-        await _broadcast(session_id, "upload_docs", "running", "No file upload fields found on this page.", page)
+        await _broadcast(
+            session_id,
+            "upload_docs",
+            "running",
+            "No file upload fields found on this page.",
+            page,
+        )
         return
 
     # Heuristic: first file input = resume, second = cover letter
@@ -213,10 +242,22 @@ async def upload_documents(
         if file_path and Path(file_path).exists():
             try:
                 await file_input.set_input_files(file_path)
-                await _broadcast(session_id, "upload_docs", "running", f"✓ Uploaded {doc_label}", page)
+                await _broadcast(
+                    session_id,
+                    "upload_docs",
+                    "running",
+                    f"✓ Uploaded {doc_label}",
+                    page,
+                )
                 await asyncio.sleep(1)
             except Exception as e:
-                await _broadcast(session_id, "upload_docs", "error", f"Failed to upload {doc_label}: {e}", page)
+                await _broadcast(
+                    session_id,
+                    "upload_docs",
+                    "error",
+                    f"Failed to upload {doc_label}: {e}",
+                    page,
+                )
 
 
 async def take_screenshot(session_id: str) -> Optional[str]:
@@ -238,7 +279,9 @@ async def pause_session(session_id: str):
         session["paused"] = True
         session["pause_event"].clear()
         session["status"] = "paused"
-        await _broadcast(session_id, "control", "paused", "Automation paused. You have control.")
+        await _broadcast(
+            session_id, "control", "paused", "Automation paused. You have control."
+        )
 
 
 async def resume_session(session_id: str):
@@ -259,12 +302,15 @@ async def stop_session(session_id: str):
         except Exception:
             pass
         session["status"] = "stopped"
-        await ws_manager.broadcast(session_id, {
-            "session_id": session_id,
-            "step": "control",
-            "status": "done",
-            "message": "Session closed.",
-        })
+        await ws_manager.broadcast(
+            session_id,
+            {
+                "session_id": session_id,
+                "step": "control",
+                "status": "done",
+                "message": "Session closed.",
+            },
+        )
         del _sessions[session_id]
 
 
@@ -310,6 +356,7 @@ class PlaywrightService:
             )
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Failed to initialize Playwright browser: {e}")
             raise
@@ -338,6 +385,7 @@ class PlaywrightService:
 
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to fetch {url}: {e}")
             return None
@@ -356,5 +404,6 @@ class PlaywrightService:
                 self._playwright = None
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Error closing Playwright: {e}")

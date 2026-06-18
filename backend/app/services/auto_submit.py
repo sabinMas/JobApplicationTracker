@@ -2,24 +2,23 @@
 Enhanced automation for fully automated job application submission.
 Handles form detection, filling, and submission across different ATS platforms.
 """
+
 import asyncio
-from typing import Optional
 
 try:
     from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
     Page = None
     PlaywrightTimeoutError = Exception
 
-from .ats_integration import detect_ats_from_url, get_submit_button_selectors, get_form_field_selectors
+from .ats_integration import get_submit_button_selectors, get_form_field_selectors
 
 
 async def detect_and_fill_required_fields(
-    page: Page,
-    profile: dict,
-    timeout: int = 5000
+    page: Page, profile: dict, timeout: int = 5000
 ) -> dict[str, bool]:
     """
     Intelligently detect and fill all visible form fields.
@@ -75,12 +74,16 @@ async def _fill_dropdowns(page: Page, profile: dict) -> None:
         selects = await page.query_selector_all("select")
         for select in selects:
             try:
-                label = await select.evaluate("el => el.previousElementSibling?.textContent || el.aria_label || ''")
+                label = await select.evaluate(
+                    "el => el.previousElementSibling?.textContent || el.aria_label || ''"
+                )
 
                 # Try to match dropdown to profile field
                 if any(x in str(label).lower() for x in ["job type", "employment"]):
                     await select.select_option("full-time")
-                elif any(x in str(label).lower() for x in ["notice period", "available"]):
+                elif any(
+                    x in str(label).lower() for x in ["notice period", "available"]
+                ):
                     await select.select_option("2 weeks")
 
             except Exception:
@@ -104,8 +107,14 @@ async def _fill_checkboxes(page: Page) -> None:
 
                 # Only auto-check specific known agreement types
                 important_keywords = [
-                    "agree", "accept", "terms", "conditions",
-                    "privacy", "legal", "consent", "eligibility"
+                    "agree",
+                    "accept",
+                    "terms",
+                    "conditions",
+                    "privacy",
+                    "legal",
+                    "consent",
+                    "eligibility",
                 ]
 
                 if any(kw in label for kw in important_keywords):

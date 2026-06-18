@@ -44,8 +44,7 @@ class ScoringFilter:
             }
 
         should_apply = (
-            score >= self.min_score
-            and result.get("recommendation", "SKIP") != "SKIP"
+            score >= self.min_score and result.get("recommendation", "SKIP") != "SKIP"
         )
         reason = (
             f"Score {score}/10 meets threshold {self.min_score}/10"

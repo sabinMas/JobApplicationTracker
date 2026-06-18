@@ -1,9 +1,7 @@
 """Actor framework for pluggable, reusable scrapers."""
 
-import json
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
@@ -12,11 +10,13 @@ logger = logging.getLogger(__name__)
 
 class ActorInput(BaseModel):
     """Base class for actor inputs. Subclass for each actor."""
+
     pass
 
 
 class ActorOutput(BaseModel):
     """Base class for actor outputs. Subclass for each actor."""
+
     pass
 
 

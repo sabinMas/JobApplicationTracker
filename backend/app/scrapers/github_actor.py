@@ -52,10 +52,10 @@ class GitHubActor(Actor):
             # Extract job listings from the page
             # GitHub Jobs shows job IDs as links in the page
             import re
-            job_links = re.findall(
-                r'href="(/positions/([a-f0-9\-]+))"',
-                html
-            )[:5]  # Limit to first 5
+
+            job_links = re.findall(r'href="(/positions/([a-f0-9\-]+))"', html)[
+                :5
+            ]  # Limit to first 5
 
             logger.info(f"Found {len(job_links)} job links on GitHub Jobs")
 

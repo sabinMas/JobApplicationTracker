@@ -2,9 +2,10 @@
 ATS Platform integrations: Greenhouse, Workday, Lever, Taleo, BambooHR, Ashby, etc.
 Each platform has specific APIs and quirks for automation.
 """
-import json
+
 import httpx
 from typing import Optional
+
 
 # Greenhouse Jobs API (public, no auth needed for reading)
 async def get_greenhouse_board(board_slug: str) -> list[dict]:
@@ -12,7 +13,7 @@ async def get_greenhouse_board(board_slug: str) -> list[dict]:
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"https://api.greenhouse.io/v1/boards/{board_slug}/jobs?content=true",
-            timeout=10
+            timeout=10,
         )
         if resp.status_code != 200:
             return []
@@ -34,9 +35,9 @@ async def get_lever_jobs(company_handle: str) -> list[dict]:
     """Fetch jobs from a Lever company page."""
     async with httpx.AsyncClient() as client:
         resp = await client.get(
-            f"https://api.lever.co/v0/postings?mode=json",
+            "https://api.lever.co/v0/postings?mode=json",
             params={"org": company_handle},
-            timeout=10
+            timeout=10,
         )
         if resp.status_code != 200:
             return []

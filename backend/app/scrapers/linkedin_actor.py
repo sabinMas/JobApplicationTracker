@@ -69,7 +69,9 @@ class LinkedInActor(Actor):
                                 job_data["source"] = "linkedin"
                                 job_data["source_url"] = job_url
                                 items.append(job_data)
-                                logger.debug(f"Extracted: {job_data.get('title')} at {job_data.get('company')}")
+                                logger.debug(
+                                    f"Extracted: {job_data.get('title')} at {job_data.get('company')}"
+                                )
                     except Exception as e:
                         logger.error(f"Error scraping {job_url}: {e}")
                         continue
@@ -84,6 +86,7 @@ class LinkedInActor(Actor):
         """Extract job listing URLs from LinkedIn search page HTML."""
         # Simple regex-based extraction of LinkedIn job URLs
         import re
-        pattern = r'https://www\.linkedin\.com/jobs/view/\d+[/?]'
+
+        pattern = r"https://www\.linkedin\.com/jobs/view/\d+[/?]"
         urls = list(set(re.findall(pattern, html)))
         return urls[:10]  # Limit to first 10 per page

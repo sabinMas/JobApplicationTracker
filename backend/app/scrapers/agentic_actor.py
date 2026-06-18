@@ -126,9 +126,7 @@ class AgenticScraperActor(Actor):
         max_results: int,
     ) -> List[Dict[str, Any]]:
         session = aioboto3.Session()
-        messages: list[dict[str, Any]] = [
-            {"role": "user", "content": [{"text": task}]}
-        ]
+        messages: list[dict[str, Any]] = [{"role": "user", "content": [{"text": task}]}]
         system = [
             {
                 "text": (

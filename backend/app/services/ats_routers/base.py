@@ -10,20 +10,20 @@ from typing import Optional
 
 class ATSRouter(ABC):
     """Base class for ATS platform handlers"""
-    
+
     @abstractmethod
     async def can_handle(self, apply_url: str) -> bool:
         """
         Check if this router can handle the given apply URL.
-        
+
         Args:
             apply_url: The job application URL
-            
+
         Returns:
             True if this router should handle this URL, False otherwise
         """
         pass
-    
+
     @abstractmethod
     async def submit_application(
         self,
@@ -35,14 +35,14 @@ class ATSRouter(ABC):
     ) -> dict:
         """
         Submit application using this ATS platform.
-        
+
         Args:
             application_id: Database application ID for tracking
             job_url: URL of the job application page/form
             profile: User profile dict with name, email, phone, skills, etc.
             resume_path: Path to resume file (PDF)
             cover_letter_path: Path to cover letter file (PDF)
-        
+
         Returns:
             {
                 "status": "success" | "failed" | "submitted_unverified",

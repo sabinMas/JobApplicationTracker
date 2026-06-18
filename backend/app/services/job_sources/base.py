@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 class JobListing:
     """Normalized job listing from any source."""
-    
+
     def __init__(
         self,
         title: str,
@@ -56,7 +56,7 @@ class JobListing:
         self.posted_date = posted_date
         self.external_id = external_id
         self.discovered_at = datetime.now(timezone.utc).isoformat()
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary for database storage."""
         return {
@@ -76,37 +76,37 @@ class JobListing:
 
 class JobSource(ABC):
     """Base class for job sources."""
-    
+
     def __init__(self, name: str):
         """
         Args:
             name: Human-readable name of this source (e.g., "LinkedIn", "GitHub", "HackerNews RSS")
         """
         self.name = name
-    
+
     @abstractmethod
     async def fetch_jobs(self) -> List[JobListing]:
         """
         Fetch job listings from this source.
-        
+
         Returns:
             List of normalized JobListing objects
-            
+
         Raises:
             Exception with descriptive message if fetch fails
         """
         pass
-    
+
     @abstractmethod
     async def get_external_id(self, job: JobListing) -> str:
         """
         Generate a unique external ID for deduplication.
-        
+
         This allows detecting when the same job appears from multiple sources.
-        
+
         Args:
             job: JobListing object
-            
+
         Returns:
             Unique identifier (e.g., "{source}_{job_id}" or hash of title+company)
         """

@@ -1,20 +1,18 @@
 """
 Provider-routing AI layer.
 
-Primary provider: AWS Bedrock (Claude) via the async Converse API — paid
-with AWS credits, IAM-authenticated, no API key and no use-case form needed.
-Fallback provider: Cerebras (OpenAI-compatible endpoint).
+Primary provider: AWS Bedrock via async Converse API — paid with AWS credits,
+IAM-authenticated, no API key and no use-case form needed.
 
-Routing is controlled by the AI_PROVIDER env var ("bedrock" | "cerebras",
-default "bedrock"). If the primary provider fails, the call falls back to the
-other provider automatically.
+Model selection (configured via environment):
+- FAST  (extraction, scoring, field mapping):  Qwen3 Coder Next (on-demand throughput)
+- SMART (resume tailoring, cover letters):     Qwen3 Coder 30B (on-demand throughput)
 
-Two model tiers for cost optimization:
-- FAST  (extraction, scoring, field mapping): Claude 3 Haiku (fastest, cheapest)
-- SMART (resume tailoring, cover letters):    Claude 3.5 Sonnet (highest quality)
+Note: Using Qwen models for on-demand throughput. Claude models in this account
+require provisioned throughput (INFERENCE_PROFILE), which is why Qwen was selected.
 
 All high-level AI functions used across the app live here. Service modules
-should import from `ai_service`, not from `cerebras_service`.
+should import from `ai_service`.
 """
 
 import json
@@ -24,22 +22,22 @@ from typing import Any, Optional
 
 import aioboto3
 
-from . import cerebras_service
-
 logger = logging.getLogger(__name__)
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "bedrock")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
-# Claude models via AWS Bedrock — NO gate required, use your AWS credentials
-# Support forced tool-use (structured output) via Bedrock Converse API
+# AWS Bedrock models with on-demand throughput support
 # Two-tier approach for cost optimization:
-# FAST  (extraction, scoring, field mapping): Claude 3 Haiku (~fastest, cheapest)
-# SMART (resume tailoring, cover letters):    Claude 3.5 Sonnet (~highest quality)
-BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "anthropic.claude-3-haiku-20240307-v1:0")
-BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "anthropic.claude-3-5-sonnet-20241022-v2:0")
+# FAST  (extraction, scoring, field mapping): Qwen3 Coder Next
+# SMART (resume tailoring, cover letters):    Qwen3 Coder 30B
+# Note: Using Qwen models because Claude models in this account require provisioned throughput
+BEDROCK_FAST_MODEL = os.getenv("BEDROCK_FAST_MODEL", "qwen.qwen3-coder-next")
+BEDROCK_SMART_MODEL = os.getenv("BEDROCK_SMART_MODEL", "qwen.qwen3-coder-30b-a3b-v1:0")
 
-logger.info(f"AI Provider: {AI_PROVIDER.upper()} | Fast: {BEDROCK_FAST_MODEL} | Smart: {BEDROCK_SMART_MODEL}")
+logger.info(
+    f"AI Provider: {AI_PROVIDER.upper()} | Fast: {BEDROCK_FAST_MODEL} | Smart: {BEDROCK_SMART_MODEL}"
+)
 
 _session = aioboto3.Session()
 
@@ -75,7 +73,9 @@ async def _bedrock_chat(
             "toolChoice": {"tool": {"name": tool_name}},
         }
 
-    logger.debug(f"Calling Bedrock Converse: model={model_id}, structured={tool_schema is not None}")
+    logger.debug(
+        f"Calling Bedrock Converse: model={model_id}, structured={tool_schema is not None}"
+    )
     try:
         async with _session.client("bedrock-runtime", region_name=AWS_REGION) as client:
             response = await client.converse(**kwargs)
@@ -87,7 +87,7 @@ async def _bedrock_chat(
     if tool_schema is not None:
         for block in content:
             if "toolUse" in block:
-                logger.debug(f"Bedrock returned structured output successfully")
+                logger.debug("Bedrock returned structured output successfully")
                 return block["toolUse"]["input"]
         raise ValueError("Bedrock response contained no toolUse block")
 
@@ -98,7 +98,13 @@ async def _bedrock_chat(
 
 def _parse_json_text(result: str) -> dict:
     """Best-effort JSON parse for providers without native structured output."""
-    result = result.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    result = (
+        result.strip()
+        .removeprefix("```json")
+        .removeprefix("```")
+        .removesuffix("```")
+        .strip()
+    )
     return json.loads(result)
 
 
@@ -108,20 +114,13 @@ async def chat(
     temperature: float = 0.3,
     tier: str = "fast",
 ) -> str:
-    """Free-text completion routed to the configured provider with fallback."""
+    """Free-text completion via AWS Bedrock."""
     model_id = BEDROCK_SMART_MODEL if tier == "smart" else BEDROCK_FAST_MODEL
-    providers = ["bedrock", "cerebras"] if AI_PROVIDER == "bedrock" else ["cerebras", "bedrock"]
-    last_error: Exception | None = None
-    for provider in providers:
-        try:
-            if provider == "bedrock":
-                return await _bedrock_chat(system, user, temperature, model_id)
-            return await cerebras_service._chat(system, user, temperature)
-        except Exception as e:
-            last_error = e
-            logger.warning(
-                f"AI provider '{provider}' failed, trying next")
-    raise RuntimeError(f"All AI providers failed: {last_error}")
+    try:
+        return await _bedrock_chat(system, user, temperature, model_id)
+    except Exception as e:
+        logger.error(f"Bedrock chat failed: {type(e).__name__}: {str(e)[:200]}")
+        raise
 
 
 async def structured(
@@ -131,40 +130,19 @@ async def structured(
     temperature: float = 0.2,
     tier: str = "fast",
 ) -> dict:
-    """Structured-output completion. Uses Bedrock tool-use when available,
-    falls back to JSON-in-text parsing on Cerebras."""
+    """Structured-output completion via AWS Bedrock with tool-use."""
     model_id = BEDROCK_SMART_MODEL if tier == "smart" else BEDROCK_FAST_MODEL
-    providers = ["bedrock", "cerebras"] if AI_PROVIDER == "bedrock" else ["cerebras", "bedrock"]
-    last_error: Exception | None = None
-    errors: dict[str, str] = {}
-
-    for provider in providers:
-        try:
-            logger.info(f"Trying AI provider: {provider} (tier={tier}, model={model_id if provider == 'bedrock' else 'cerebras'})")
-            if provider == "bedrock":
-                result = await _bedrock_chat(
-                    system, user, temperature, model_id, tool_schema=schema
-                )
-                assert isinstance(result, dict)
-                logger.info(f"✓ Bedrock succeeded")
-                return result
-            text = await cerebras_service._chat(
-                system + " Return ONLY valid JSON matching the requested structure.",
-                user,
-                temperature,
-            )
-            result = _parse_json_text(text)
-            logger.info(f"✓ Cerebras succeeded")
-            return result
-        except Exception as e:
-            last_error = e
-            error_msg = f"{type(e).__name__}: {str(e)[:200]}"
-            errors[provider] = error_msg
-            logger.warning(
-                f"AI provider '{provider}' failed: {error_msg}, trying next...")
-
-    error_detail = "; ".join(f"{k}={v}" for k, v in errors.items())
-    raise RuntimeError(f"All AI providers failed — {error_detail}")
+    try:
+        logger.info(f"Bedrock structured call: model={model_id}, tier={tier}")
+        result = await _bedrock_chat(
+            system, user, temperature, model_id, tool_schema=schema
+        )
+        assert isinstance(result, dict)
+        logger.info("Bedrock structured succeeded")
+        return result
+    except Exception as e:
+        logger.error(f"Bedrock structured failed: {type(e).__name__}: {str(e)[:200]}")
+        raise
 
 
 # ─── High-level functions (the app-facing API) ───────────────────────────────
@@ -195,11 +173,18 @@ async def extract_job(page_text: str) -> dict:
     )
     try:
         return await structured(
-            system, f"Job page text:\n\n{page_text[:8000]}", _JOB_SCHEMA, temperature=0.1
+            system,
+            f"Job page text:\n\n{page_text[:8000]}",
+            _JOB_SCHEMA,
+            temperature=0.1,
         )
     except Exception as e:
         logger.error(f"extract_job failed: {e}")
-        return {"title": "Unknown", "company": "Unknown", "description": page_text[:500]}
+        return {
+            "title": "Unknown",
+            "company": "Unknown",
+            "description": page_text[:500],
+        }
 
 
 _PROFILE_SCHEMA = {
@@ -212,11 +197,56 @@ _PROFILE_SCHEMA = {
         "linkedin_url": {"type": ["string", "null"]},
         "github_url": {"type": ["string", "null"]},
         "portfolio_url": {"type": ["string", "null"]},
-        "summary": {"type": ["string", "null"]},
-        "skills": {"type": "array", "items": {"type": "string"}},
-        "experience": {"type": "array", "items": {"type": "object"}},
-        "education": {"type": "array", "items": {"type": "object"}},
-        "certifications": {"type": "array", "items": {"type": "object"}},
+        "summary": {
+            "type": ["string", "null"],
+            "description": "2-4 sentence professional summary",
+        },
+        "skills": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of technologies, languages, and skills",
+        },
+        "experience": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "company": {"type": "string"},
+                    "title": {"type": "string"},
+                    "start": {"type": ["string", "null"]},
+                    "end": {"type": ["string", "null"]},
+                    "bullets": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+            "description": "Work experience entries",
+        },
+        "education": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "school": {"type": "string"},
+                    "degree": {"type": ["string", "null"]},
+                    "field": {"type": ["string", "null"]},
+                    "start": {"type": ["string", "null"]},
+                    "end": {"type": ["string", "null"]},
+                    "gpa": {"type": ["string", "null"]},
+                },
+            },
+            "description": "Education and degrees",
+        },
+        "certifications": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "issuer": {"type": ["string", "null"]},
+                    "date": {"type": ["string", "null"]},
+                },
+            },
+            "description": "Certifications and credentials",
+        },
     },
 }
 
@@ -224,22 +254,38 @@ _PROFILE_SCHEMA = {
 async def extract_profile(resume_text: str) -> dict:
     """Given raw text from a resume PDF, return structured profile data."""
     system = (
-        "You are a resume parser. Extract a structured candidate profile. "
-        "experience items are {company, title, start, end, bullets}; "
-        "education items are {school, degree, field, start, end, gpa}; "
-        "certifications items are {name, issuer, date}. "
-        "Use null or empty arrays for missing fields."
+        "You are a resume parser. Extract a comprehensive structured candidate profile. "
+        "Extract ALL the following fields:\n"
+        "- Contact: full_name, email, phone, location, linkedin_url, github_url, portfolio_url\n"
+        "- Summary: professional summary (2-4 sentences about their career)\n"
+        "- Skills: list of technologies, languages, and domain expertise\n"
+        "- Experience: list of {company, title, start, end, bullets (list of achievements)}\n"
+        "- Education: list of {school, degree, field, start, end, gpa}\n"
+        "- Certifications: list of {name, issuer, date}\n"
+        "Use null for missing strings, empty arrays for missing lists. "
+        "IMPORTANT: Extract skills and summary even if brief."
     )
     try:
-        logger.info(f"Starting profile extraction from {len(resume_text)} chars of resume text")
-        result = await structured(
-            system, f"Resume text:\n\n{resume_text[:8000]}", _PROFILE_SCHEMA, temperature=0.1
+        logger.info(
+            f"Starting profile extraction from {len(resume_text)} chars of resume text"
         )
-        logger.info(f"✓ Profile extraction succeeded: {result.get('full_name', 'Unknown')}")
+        result = await structured(
+            system,
+            f"Resume text:\n\n{resume_text[:8000]}",
+            _PROFILE_SCHEMA,
+            temperature=0.1,
+        )
+        logger.info(
+            f"✓ Profile extraction succeeded: {result.get('full_name', 'Unknown')}"
+        )
         return result
     except Exception as e:
-        logger.error(f"✗ extract_profile failed: {type(e).__name__}: {str(e)}", exc_info=True)
-        logger.warning(f"Falling back to returning empty profile (user can fill in manually)")
+        logger.error(
+            f"✗ extract_profile failed: {type(e).__name__}: {str(e)}", exc_info=True
+        )
+        logger.warning(
+            "Falling back to returning empty profile (user can fill in manually)"
+        )
         return {}
 
 
@@ -317,7 +363,8 @@ async def generate_cover_letter(
 ) -> str:
     """Return a tailored cover letter in plain text."""
     examples_block = "\n\n---\n\n".join(
-        f"EXAMPLE {i+1}:\n{ex[:1500]}" for i, ex in enumerate(example_cover_letters[:3])
+        f"EXAMPLE {i + 1}:\n{ex[:1500]}"
+        for i, ex in enumerate(example_cover_letters[:3])
     )
     system = (
         "You are an expert cover letter writer. Write a compelling, personalized cover letter "

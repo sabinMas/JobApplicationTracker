@@ -24,10 +24,11 @@ async def enrich_high_scoring_jobs(db: AsyncSession, score_threshold: int = 7) -
     Returns the number of enrichment runs created.
     """
     # Query jobs with high scores that are still in 'discovered' status
-    stmt = select(Job).where(
-        Job.score >= score_threshold,
-        Job.status == "discovered"
-    ).limit(20)  # Limit to prevent overwhelming SQS
+    stmt = (
+        select(Job)
+        .where(Job.score >= score_threshold, Job.status == "discovered")
+        .limit(20)
+    )  # Limit to prevent overwhelming SQS
 
     result = await db.execute(stmt)
     jobs = result.scalars().all()
@@ -38,7 +39,9 @@ async def enrich_high_scoring_jobs(db: AsyncSession, score_threshold: int = 7) -
             # Determine which scraper to use based on source
             actor_name = _get_actor_for_source(job.source)
             if not actor_name:
-                logger.warning(f"No actor for source: {job.source}, skipping job {job.id}")
+                logger.warning(
+                    f"No actor for source: {job.source}, skipping job {job.id}"
+                )
                 continue
 
             # Create enrichment run
@@ -56,13 +59,13 @@ async def enrich_high_scoring_jobs(db: AsyncSession, score_threshold: int = 7) -
             )
 
             # Mark job as being enriched
-            stmt_update = update(Job).where(Job.id == job.id).values(
-                status="enriching"
-            )
+            stmt_update = update(Job).where(Job.id == job.id).values(status="enriching")
             await db.execute(stmt_update)
             await db.commit()
 
-            logger.info(f"Created enrichment run {run_id} for job {job.id}: {job.title}")
+            logger.info(
+                f"Created enrichment run {run_id} for job {job.id}: {job.title}"
+            )
             created_count += 1
 
         except Exception as e:
@@ -105,13 +108,17 @@ async def on_scraper_complete(
 
         # Use the first result to enrich the job
         enrichment = items[0]
-        
+
         # Update job with enriched data
-        stmt_update = update(Job).where(Job.id == target_job_id).values(
-            description=enrichment.get("description") or job.description,
-            requirements=enrichment.get("requirements") or job.requirements,
-            salary_range=enrichment.get("salary_range") or job.salary_range,
-            status="enriched",  # Mark as enriched
+        stmt_update = (
+            update(Job)
+            .where(Job.id == target_job_id)
+            .values(
+                description=enrichment.get("description") or job.description,
+                requirements=enrichment.get("requirements") or job.requirements,
+                salary_range=enrichment.get("salary_range") or job.salary_range,
+                status="enriched",  # Mark as enriched
+            )
         )
         await db.execute(stmt_update)
         await db.commit()

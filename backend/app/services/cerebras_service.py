@@ -4,6 +4,7 @@ Cerebras provider (OpenAI-compatible endpoint) — fallback AI provider.
 High-level AI functions live in `ai_service`; this module only exposes the
 low-level chat call used by the provider router there.
 """
+
 import os
 from openai import AsyncOpenAI
 from dotenv import load_dotenv

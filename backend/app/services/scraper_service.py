@@ -1,11 +1,10 @@
 """
 Job page scraping and Greenhouse public API integration.
 """
+
 import httpx
 from bs4 import BeautifulSoup
 from datetime import datetime, timezone
-from typing import Optional
-import asyncio
 
 
 HEADERS = {
@@ -23,7 +22,9 @@ async def scrape_job_page(url: str) -> str:
     Fetch a job posting page and return clean text content.
     Falls back gracefully if JS-heavy (returns whatever we can get).
     """
-    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True, timeout=15) as client:
+    async with httpx.AsyncClient(
+        headers=HEADERS, follow_redirects=True, timeout=15
+    ) as client:
         try:
             resp = await client.get(url)
             resp.raise_for_status()
@@ -38,7 +39,9 @@ async def scrape_job_page(url: str) -> str:
                 soup.find("main")
                 or soup.find("article")
                 or soup.find(id=lambda x: x and "job" in x.lower() if x else False)
-                or soup.find(class_=lambda x: x and "job" in " ".join(x).lower() if x else False)
+                or soup.find(
+                    class_=lambda x: x and "job" in " ".join(x).lower() if x else False
+                )
                 or soup.body
             )
             if main:
@@ -47,7 +50,7 @@ async def scrape_job_page(url: str) -> str:
                 text = soup.get_text(separator="\n", strip=True)
 
             # Clean up excessive blank lines
-            lines = [l.strip() for l in text.splitlines() if l.strip()]
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
             return "\n".join(lines)
 
         except Exception as e:
@@ -67,19 +70,23 @@ async def fetch_greenhouse_jobs(company_slug: str) -> list[dict]:
             data = resp.json()
             jobs = []
             for job in data.get("jobs", []):
-                jobs.append({
-                    "title": job.get("title", ""),
-                    "company": data.get("board", {}).get("name", company_slug),
-                    "location": job.get("location", {}).get("name", ""),
-                    "source": "greenhouse",
-                    "source_url": job.get("absolute_url", ""),
-                    "apply_url": job.get("absolute_url", ""),
-                    "description": job.get("content", ""),
-                    "posted_date": job.get("updated_at", "")[:10] if job.get("updated_at") else None,
-                    "scraped_at": datetime.now(timezone.utc).isoformat(),
-                })
+                jobs.append(
+                    {
+                        "title": job.get("title", ""),
+                        "company": data.get("board", {}).get("name", company_slug),
+                        "location": job.get("location", {}).get("name", ""),
+                        "source": "greenhouse",
+                        "source_url": job.get("absolute_url", ""),
+                        "apply_url": job.get("absolute_url", ""),
+                        "description": job.get("content", ""),
+                        "posted_date": job.get("updated_at", "")[:10]
+                        if job.get("updated_at")
+                        else None,
+                        "scraped_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             return jobs
-        except Exception as e:
+        except Exception:
             return []
 
 

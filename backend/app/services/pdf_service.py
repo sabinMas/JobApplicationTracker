@@ -1,6 +1,7 @@
 """
 PDF text extraction (pdfplumber) and PDF generation (reportlab).
 """
+
 try:
     import pdfplumber
     from reportlab.lib.pagesizes import letter
@@ -8,7 +9,8 @@ try:
     from reportlab.lib.units import inch
     from reportlab.lib import colors
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    from reportlab.lib.enums import TA_CENTER
+
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
@@ -19,7 +21,9 @@ from pathlib import Path
 
 def extract_text(pdf_path: str) -> str:
     if not PDF_AVAILABLE:
-        raise RuntimeError("pdfplumber not installed. Install with: pip install pdfplumber")
+        raise RuntimeError(
+            "pdfplumber not installed. Install with: pip install pdfplumber"
+        )
     """Extract all text from a PDF file."""
     text_parts = []
     with pdfplumber.open(pdf_path) as pdf:
@@ -30,7 +34,9 @@ def extract_text(pdf_path: str) -> str:
     return "\n\n".join(text_parts)
 
 
-def markdown_to_pdf(markdown_text: str, output_path: str, doc_type: str = "resume") -> str:
+def markdown_to_pdf(
+    markdown_text: str, output_path: str, doc_type: str = "resume"
+) -> str:
     """
     Convert markdown text to a clean PDF.
     Supports: # H1, ## H2, ### H3, - bullets, plain paragraphs.
@@ -50,28 +56,45 @@ def markdown_to_pdf(markdown_text: str, output_path: str, doc_type: str = "resum
     styles = getSampleStyleSheet()
 
     style_h1 = ParagraphStyle(
-        "H1", parent=styles["Heading1"],
-        fontSize=18, spaceAfter=4, textColor=colors.HexColor("#1a1a2e"),
+        "H1",
+        parent=styles["Heading1"],
+        fontSize=18,
+        spaceAfter=4,
+        textColor=colors.HexColor("#1a1a2e"),
         alignment=TA_CENTER,
     )
     style_h2 = ParagraphStyle(
-        "H2", parent=styles["Heading2"],
-        fontSize=13, spaceBefore=10, spaceAfter=2,
+        "H2",
+        parent=styles["Heading2"],
+        fontSize=13,
+        spaceBefore=10,
+        spaceAfter=2,
         textColor=colors.HexColor("#16213e"),
         borderPad=0,
     )
     style_h3 = ParagraphStyle(
-        "H3", parent=styles["Heading3"],
-        fontSize=11, spaceBefore=6, spaceAfter=2,
+        "H3",
+        parent=styles["Heading3"],
+        fontSize=11,
+        spaceBefore=6,
+        spaceAfter=2,
         textColor=colors.HexColor("#0f3460"),
     )
     style_body = ParagraphStyle(
-        "Body", parent=styles["Normal"],
-        fontSize=10, leading=14, spaceAfter=3,
+        "Body",
+        parent=styles["Normal"],
+        fontSize=10,
+        leading=14,
+        spaceAfter=3,
     )
     style_bullet = ParagraphStyle(
-        "Bullet", parent=styles["Normal"],
-        fontSize=10, leading=13, leftIndent=16, bulletIndent=6, spaceAfter=2,
+        "Bullet",
+        parent=styles["Normal"],
+        fontSize=10,
+        leading=13,
+        leftIndent=16,
+        bulletIndent=6,
+        spaceAfter=2,
     )
 
     story = []
@@ -86,7 +109,14 @@ def markdown_to_pdf(markdown_text: str, output_path: str, doc_type: str = "resum
         if stripped.startswith("### "):
             story.append(Paragraph(stripped[4:], style_h3))
         elif stripped.startswith("## "):
-            story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc"), spaceAfter=2))
+            story.append(
+                HRFlowable(
+                    width="100%",
+                    thickness=0.5,
+                    color=colors.HexColor("#cccccc"),
+                    spaceAfter=2,
+                )
+            )
             story.append(Paragraph(stripped[3:].upper(), style_h2))
         elif stripped.startswith("# "):
             story.append(Paragraph(stripped[2:], style_h1))

@@ -55,13 +55,17 @@ async def _stage_discover(run: PipelineRun) -> None:
 
 async def _stage_score(db: AsyncSession, run: PipelineRun) -> None:
     jobs = (
-        await db.execute(
-            select(Job)
-            .where(Job.score.is_(None), Job.status == "discovered")
-            .order_by(Job.created_at.desc())
-            .limit(SCORING_BATCH_LIMIT)
+        (
+            await db.execute(
+                select(Job)
+                .where(Job.score.is_(None), Job.status == "discovered")
+                .order_by(Job.created_at.desc())
+                .limit(SCORING_BATCH_LIMIT)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for job in jobs:
         try:
@@ -79,26 +83,34 @@ async def _stage_prepare_and_submit(
     daily_limit = prefs.daily_application_limit or 10
 
     jobs = (
-        await db.execute(
-            select(Job)
-            .where(
-                Job.score >= min_score,
-                Job.score_recommendation == "SUBMIT",
-                Job.status.in_(["discovered", "enriching"]),
-                Job.apply_url.isnot(None),
+        (
+            await db.execute(
+                select(Job)
+                .where(
+                    Job.score >= min_score,
+                    Job.score_recommendation == "SUBMIT",
+                    Job.status.in_(["discovered", "enriching"]),
+                    Job.apply_url.isnot(None),
+                )
+                .order_by(Job.score.desc())
+                .limit(daily_limit)
             )
-            .order_by(Job.score.desc())
-            .limit(daily_limit)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for job in jobs:
         try:
             existing = (
-                await db.execute(
-                    select(Application).where(Application.job_id == job.id)
+                (
+                    await db.execute(
+                        select(Application).where(Application.job_id == job.id)
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if existing:
                 continue
 
@@ -147,7 +159,9 @@ async def _enqueue_auto_apply(application_id: int) -> None:
         raise RuntimeError("SQS_QUEUE_URL not configured for auto-apply")
 
     session = aioboto3.Session()
-    async with session.client("sqs", region_name=os.getenv("AWS_REGION", "us-east-1")) as sqs:
+    async with session.client(
+        "sqs", region_name=os.getenv("AWS_REGION", "us-east-1")
+    ) as sqs:
         await sqs.send_message(
             QueueUrl=APPLY_QUEUE_URL,
             MessageBody=json.dumps(

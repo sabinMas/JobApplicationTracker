@@ -5,8 +5,8 @@ Runs on a schedule (e.g., every 30 minutes) to:
 2. Automatically apply to matching jobs
 3. Track results and failures
 """
+
 import asyncio
-import json
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,10 +78,12 @@ async def apply_to_matching_jobs(
                 select(Application).where(Application.job_id == job.id)
             )
             if existing_app.scalar_one_or_none():
-                results["skipped"].append({
-                    "job_id": job.id,
-                    "reason": "Already applied",
-                })
+                results["skipped"].append(
+                    {
+                        "job_id": job.id,
+                        "reason": "Already applied",
+                    }
+                )
                 continue
 
             # Check salary if specified
@@ -89,10 +91,12 @@ async def apply_to_matching_jobs(
                 try:
                     # Try to parse salary
                     if "$" not in job.salary_range:
-                        results["skipped"].append({
-                            "job_id": job.id,
-                            "reason": "Salary range unclear",
-                        })
+                        results["skipped"].append(
+                            {
+                                "job_id": job.id,
+                                "reason": "Salary range unclear",
+                            }
+                        )
                         continue
                 except Exception:
                     pass
@@ -111,22 +115,28 @@ async def apply_to_matching_jobs(
             success = await _auto_apply_to_job(app, job, profile)
 
             if success:
-                results["applied"].append({
-                    "job_id": job.id,
-                    "company": job.company,
-                    "title": job.title,
-                })
+                results["applied"].append(
+                    {
+                        "job_id": job.id,
+                        "company": job.company,
+                        "title": job.title,
+                    }
+                )
             else:
-                results["failed"].append({
-                    "job_id": job.id,
-                    "reason": "Automation failed",
-                })
+                results["failed"].append(
+                    {
+                        "job_id": job.id,
+                        "reason": "Automation failed",
+                    }
+                )
 
         except Exception as e:
-            results["failed"].append({
-                "job_id": job.id,
-                "reason": str(e),
-            })
+            results["failed"].append(
+                {
+                    "job_id": job.id,
+                    "reason": str(e),
+                }
+            )
 
     return results
 
@@ -162,7 +172,9 @@ async def _auto_apply_to_job(
         ats_type = detect_ats_from_url(job.apply_url)
 
         # Fill form
-        profile_dict = {k: v for k, v in profile.__dict__.items() if not k.startswith("_")}
+        profile_dict = {
+            k: v for k, v in profile.__dict__.items() if not k.startswith("_")
+        }
         await detect_and_fill_required_fields(page, profile_dict)
 
         # Submit

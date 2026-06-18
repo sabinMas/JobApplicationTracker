@@ -5,6 +5,7 @@ In production (AUTO_APPLY_MODE=queue, the Lambda API) submissions are enqueued
 to SQS and executed by the ECS worker, where Playwright lives. In development
 (AUTO_APPLY_MODE=inline, the default) they run in-process.
 """
+
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -39,7 +40,9 @@ async def full_auto_apply(
     """
     if AUTO_APPLY_MODE == "queue":
         app = (
-            await db.execute(select(Application).where(Application.id == application_id))
+            await db.execute(
+                select(Application).where(Application.id == application_id)
+            )
         ).scalar_one_or_none()
         if not app:
             raise HTTPException(404, "Application not found.")
@@ -75,7 +78,9 @@ async def detect_required_fields(
     """
     logger.info(f"Detecting required fields for application {application_id}")
 
-    app_result = await db.execute(select(Application).where(Application.id == application_id))
+    app_result = await db.execute(
+        select(Application).where(Application.id == application_id)
+    )
     app = app_result.scalar_one_or_none()
     if not app:
         raise HTTPException(404, "Application not found.")

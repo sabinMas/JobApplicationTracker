@@ -27,6 +27,8 @@ export interface Job {
   posted_date?: string
   status: string
   notes?: string
+  score?: number
+  score_reasoning?: string
   created_at?: string
 }
 

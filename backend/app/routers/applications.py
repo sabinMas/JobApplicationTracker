@@ -12,12 +12,16 @@ router = APIRouter(prefix="/api/applications", tags=["applications"])
 
 @router.get("", response_model=List[ApplicationOut])
 async def list_applications(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Application).order_by(Application.created_at.desc()))
+    result = await db.execute(
+        select(Application).order_by(Application.created_at.desc())
+    )
     return result.scalars().all()
 
 
 @router.post("", response_model=ApplicationOut)
-async def create_application(data: ApplicationCreate, db: AsyncSession = Depends(get_db)):
+async def create_application(
+    data: ApplicationCreate, db: AsyncSession = Depends(get_db)
+):
     # Verify job exists
     job_result = await db.execute(select(Job).where(Job.id == data.job_id))
     if not job_result.scalar_one_or_none():
@@ -40,7 +44,9 @@ async def get_application(app_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/{app_id}", response_model=ApplicationOut)
-async def update_application(app_id: int, data: ApplicationUpdate, db: AsyncSession = Depends(get_db)):
+async def update_application(
+    app_id: int, data: ApplicationUpdate, db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(Application).where(Application.id == app_id))
     app = result.scalar_one_or_none()
     if not app:

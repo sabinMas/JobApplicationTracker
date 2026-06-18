@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save, Sparkles, Loader2, CheckCircle, Trash2, Plus } from 'lucide-react'
+import { Save, Sparkles, Loader2, CheckCircle, Trash2, Plus, ArrowRight } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 import {
   getPreferences,
   updatePreferences,
   seedPreferences,
   SearchPreferences,
 } from '../api/preferences'
+import { useNavigate } from 'react-router-dom'
 
 export function PreferencesPage() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { data: prefs, isLoading } = useQuery({
     queryKey: ['preferences'],
@@ -16,6 +19,8 @@ export function PreferencesPage() {
   })
   const [form, setForm] = useState<Partial<SearchPreferences>>({})
   const [saved, setSaved] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [seedError, setSeedError] = useState<string | null>(null)
 
   useEffect(() => {
     if (prefs) setForm(prefs)
@@ -26,15 +31,23 @@ export function PreferencesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['preferences'] })
       setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      setLastUpdated(new Date())
+      setTimeout(() => setSaved(false), 5000)
     },
   })
 
   const seedMutation = useMutation({
     mutationFn: seedPreferences,
     onSuccess: (data) => {
+      console.log('AI Suggest succeeded, updating form with:', data)
       setForm(data)
+      setSeedError(null)
       qc.invalidateQueries({ queryKey: ['preferences'] })
+    },
+    onError: (error: any) => {
+      const errorMsg = error?.response?.data?.detail || error?.message || 'Failed to generate suggestions'
+      console.error('AI Suggest failed:', errorMsg)
+      setSeedError(errorMsg)
     },
   })
 
@@ -52,8 +65,16 @@ export function PreferencesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Search Preferences</h1>
           <p className="text-gray-600 text-sm mt-1">
-            Define what jobs to target — the pipeline uses these to score and filter
+            Define what jobs to target — we'll score and filter matches for you
           </p>
+          {lastUpdated && (
+            <p className="text-xs text-gray-500 mt-2">
+              Last updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+            </p>
+          )}
+          {seedError && (
+            <p className="text-xs text-red-600 mt-2">Error: {seedError}</p>
+          )}
         </div>
         <div className="flex gap-2">
           <button
@@ -232,6 +253,18 @@ export function PreferencesPage() {
           </label>
           <span className="text-sm text-gray-800 font-medium">Remote OK</span>
         </div>
+      </div>
+
+      {/* Guidance footer */}
+      <div className="border-t border-parchment-300 pt-6 mt-8">
+        <p className="text-sm text-gray-600 mb-3">✓ Preferences saved. Ready to find jobs?</p>
+        <button
+          onClick={() => navigate('/')}
+          className="btn-primary flex items-center gap-2 w-full sm:w-auto"
+        >
+          View Dashboard
+          <ArrowRight size={16} />
+        </button>
       </div>
     </div>
   )

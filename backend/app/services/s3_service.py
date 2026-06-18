@@ -6,13 +6,13 @@ resumes, cover letters, and other application documents.
 
 Usage:
     from app.services.s3_service import s3_service
-    
+
     # Upload a file
     s3_key = await s3_service.upload_document(file_path, "resumes/resume.pdf")
-    
+
     # Get a download URL (expires in 1 hour)
     url = await s3_service.get_download_url(s3_key)
-    
+
     # Download content
     content = await s3_service.download_document(s3_key)
 """
@@ -20,7 +20,6 @@ Usage:
 import os
 import asyncio
 from typing import Optional
-from pathlib import Path
 
 import boto3
 from botocore.exceptions import ClientError
@@ -49,7 +48,7 @@ class S3DocumentService:
         if self._client is None:
             self._client = boto3.client("s3", region_name=self.region)
         return self._client
-    
+
     async def upload_document(
         self,
         file_path: str,
@@ -58,21 +57,24 @@ class S3DocumentService:
     ) -> str:
         """
         Upload a document to S3.
-        
+
         Args:
             file_path: Local path to the file
             s3_key: S3 object key (e.g., "resumes/user1/resume_v2.pdf")
             content_type: MIME type of the file
-            
+
         Returns:
             The S3 key where the file was stored
         """
-        logger.info("Uploading document to S3", extra_fields={
-            "s3_key": s3_key,
-            "bucket": self.bucket,
-            "file_path": file_path,
-        })
-        
+        logger.info(
+            "Uploading document to S3",
+            extra_fields={
+                "s3_key": s3_key,
+                "bucket": self.bucket,
+                "file_path": file_path,
+            },
+        )
+
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
@@ -84,19 +86,25 @@ class S3DocumentService:
                     ExtraArgs={"ContentType": content_type},
                 ),
             )
-            
-            logger.info("Document uploaded successfully", extra_fields={
-                "s3_key": s3_key,
-            })
+
+            logger.info(
+                "Document uploaded successfully",
+                extra_fields={
+                    "s3_key": s3_key,
+                },
+            )
             return s3_key
-            
+
         except ClientError as e:
-            logger.error(f"S3 upload failed: {e}", extra_fields={
-                "s3_key": s3_key,
-                "error": str(e),
-            })
+            logger.error(
+                f"S3 upload failed: {e}",
+                extra_fields={
+                    "s3_key": s3_key,
+                    "error": str(e),
+                },
+            )
             raise
-    
+
     async def upload_bytes(
         self,
         content: bytes,
@@ -105,20 +113,23 @@ class S3DocumentService:
     ) -> str:
         """
         Upload bytes directly to S3.
-        
+
         Args:
             content: File content as bytes
             s3_key: S3 object key
             content_type: MIME type
-            
+
         Returns:
             The S3 key
         """
-        logger.info("Uploading bytes to S3", extra_fields={
-            "s3_key": s3_key,
-            "size_bytes": len(content),
-        })
-        
+        logger.info(
+            "Uploading bytes to S3",
+            extra_fields={
+                "s3_key": s3_key,
+                "size_bytes": len(content),
+            },
+        )
+
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
@@ -130,30 +141,36 @@ class S3DocumentService:
                     ContentType=content_type,
                 ),
             )
-            
+
             return s3_key
-            
+
         except ClientError as e:
-            logger.error(f"S3 upload bytes failed: {e}", extra_fields={
-                "s3_key": s3_key,
-                "error": str(e),
-            })
+            logger.error(
+                f"S3 upload bytes failed: {e}",
+                extra_fields={
+                    "s3_key": s3_key,
+                    "error": str(e),
+                },
+            )
             raise
-    
+
     async def download_document(self, s3_key: str) -> bytes:
         """
         Download a document from S3.
-        
+
         Args:
             s3_key: S3 object key
-            
+
         Returns:
             File content as bytes
         """
-        logger.info("Downloading document from S3", extra_fields={
-            "s3_key": s3_key,
-        })
-        
+        logger.info(
+            "Downloading document from S3",
+            extra_fields={
+                "s3_key": s3_key,
+            },
+        )
+
         try:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
@@ -161,20 +178,26 @@ class S3DocumentService:
                 lambda: self.client.get_object(Bucket=self.bucket, Key=s3_key),
             )
             content = response["Body"].read()
-            
-            logger.info("Document downloaded", extra_fields={
-                "s3_key": s3_key,
-                "size_bytes": len(content),
-            })
+
+            logger.info(
+                "Document downloaded",
+                extra_fields={
+                    "s3_key": s3_key,
+                    "size_bytes": len(content),
+                },
+            )
             return content
-            
+
         except ClientError as e:
-            logger.error(f"S3 download failed: {e}", extra_fields={
-                "s3_key": s3_key,
-                "error": str(e),
-            })
+            logger.error(
+                f"S3 download failed: {e}",
+                extra_fields={
+                    "s3_key": s3_key,
+                    "error": str(e),
+                },
+            )
             raise
-    
+
     async def get_download_url(
         self,
         s3_key: str,
@@ -182,11 +205,11 @@ class S3DocumentService:
     ) -> str:
         """
         Generate a presigned download URL.
-        
+
         Args:
             s3_key: S3 object key
             expires_in: URL expiration time in seconds (default 1 hour)
-            
+
         Returns:
             Presigned URL string
         """
@@ -201,28 +224,34 @@ class S3DocumentService:
                 ),
             )
             return url
-            
+
         except ClientError as e:
-            logger.error(f"Presigned URL generation failed: {e}", extra_fields={
-                "s3_key": s3_key,
-                "error": str(e),
-            })
+            logger.error(
+                f"Presigned URL generation failed: {e}",
+                extra_fields={
+                    "s3_key": s3_key,
+                    "error": str(e),
+                },
+            )
             raise
-    
+
     async def delete_document(self, s3_key: str) -> bool:
         """
         Delete a document from S3.
-        
+
         Args:
             s3_key: S3 object key
-            
+
         Returns:
             True if deleted successfully
         """
-        logger.info("Deleting document from S3", extra_fields={
-            "s3_key": s3_key,
-        })
-        
+        logger.info(
+            "Deleting document from S3",
+            extra_fields={
+                "s3_key": s3_key,
+            },
+        )
+
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
@@ -230,14 +259,17 @@ class S3DocumentService:
                 lambda: self.client.delete_object(Bucket=self.bucket, Key=s3_key),
             )
             return True
-            
+
         except ClientError as e:
-            logger.error(f"S3 delete failed: {e}", extra_fields={
-                "s3_key": s3_key,
-                "error": str(e),
-            })
+            logger.error(
+                f"S3 delete failed: {e}",
+                extra_fields={
+                    "s3_key": s3_key,
+                    "error": str(e),
+                },
+            )
             return False
-    
+
     async def file_exists(self, s3_key: str) -> bool:
         """Check if a file exists in S3."""
         try:
@@ -249,7 +281,7 @@ class S3DocumentService:
             return True
         except ClientError:
             return False
-    
+
     async def list_documents(self, prefix: str = "") -> list:
         """List documents with a given prefix."""
         try:
@@ -273,10 +305,13 @@ class S3DocumentService:
             ]
 
         except ClientError as e:
-            logger.error(f"S3 list failed: {e}", extra_fields={
-                "prefix": prefix,
-                "error": str(e),
-            })
+            logger.error(
+                f"S3 list failed: {e}",
+                extra_fields={
+                    "prefix": prefix,
+                    "error": str(e),
+                },
+            )
             return []
 
     async def write_jsonl(self, s3_key: str, items: list) -> str:
@@ -292,10 +327,13 @@ class S3DocumentService:
         """
         import json
 
-        logger.info("Writing JSONL to S3", extra_fields={
-            "s3_key": s3_key,
-            "items_count": len(items),
-        })
+        logger.info(
+            "Writing JSONL to S3",
+            extra_fields={
+                "s3_key": s3_key,
+                "items_count": len(items),
+            },
+        )
 
         try:
             # Convert items to JSONL (newline-delimited JSON)
@@ -313,17 +351,23 @@ class S3DocumentService:
                 ),
             )
 
-            logger.info("JSONL written to S3", extra_fields={
-                "s3_key": s3_key,
-                "size_bytes": len(content),
-            })
+            logger.info(
+                "JSONL written to S3",
+                extra_fields={
+                    "s3_key": s3_key,
+                    "size_bytes": len(content),
+                },
+            )
             return s3_key
 
         except ClientError as e:
-            logger.error(f"S3 write_jsonl failed: {e}", extra_fields={
-                "s3_key": s3_key,
-                "error": str(e),
-            })
+            logger.error(
+                f"S3 write_jsonl failed: {e}",
+                extra_fields={
+                    "s3_key": s3_key,
+                    "error": str(e),
+                },
+            )
             raise
 
 

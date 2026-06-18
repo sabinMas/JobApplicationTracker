@@ -14,7 +14,14 @@ from ..services import pdf_service
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
-DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp/data" if os.getenv("AWS_LAMBDA_FUNCTION_NAME") else str(Path(__file__).parent.parent.parent.parent / "data")))
+DATA_DIR = Path(
+    os.getenv(
+        "DATA_DIR",
+        "/tmp/data"
+        if os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+        else str(Path(__file__).parent.parent.parent.parent / "data"),
+    )
+)
 
 
 @router.get("", response_model=List[DocumentOut])
@@ -66,7 +73,9 @@ async def download_document(doc_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Document not found.")
     if not Path(doc.file_path).exists():
         raise HTTPException(404, "File not found on disk.")
-    return FileResponse(doc.file_path, media_type="application/pdf", filename=doc.filename)
+    return FileResponse(
+        doc.file_path, media_type="application/pdf", filename=doc.filename
+    )
 
 
 @router.delete("/{doc_id}")

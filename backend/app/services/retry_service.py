@@ -5,9 +5,13 @@ Provides intelligent retry strategies for transient vs. permanent errors.
 """
 
 import asyncio
+import logging
 from enum import Enum
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Any, Tuple
+
+logger = logging.getLogger(__name__)
+
 
 def _safe_log(log_func, message: str, extra_fields: dict = None):
     """Safely call log function, handling both StructuredLogger and standard Logger."""
@@ -19,12 +23,13 @@ def _safe_log(log_func, message: str, extra_fields: dict = None):
     except TypeError:
         # Fallback for standard logger (doesn't support extra_fields)
         if extra_fields:
-            message_with_context = f"{message} | {extra_fields}"
+            message = f"{message} | {extra_fields}"
         log_func(message)
 
 
 class RetryStrategy(Enum):
     """Retry strategies available."""
+
     EXPONENTIAL = "exponential"
     LINEAR = "linear"
     IMMEDIATE = "immediate"
@@ -51,7 +56,6 @@ async def should_retry(
         return False, 0
 
     error_str = str(error).lower()
-    error_type = type(error).__name__
 
     # Don't retry validation/auth errors (permanent)
     if isinstance(error, ValueError):
@@ -65,17 +69,17 @@ async def should_retry(
 
     # Retry network/timeout errors (transient)
     if isinstance(error, (asyncio.TimeoutError, ConnectionError, TimeoutError)):
-        wait_seconds = 2 ** attempt  # Exponential: 1s, 2s, 4s, 8s
+        wait_seconds = 2**attempt  # Exponential: 1s, 2s, 4s, 8s
         return True, wait_seconds
 
     # Retry form detection failures (sometimes transient due to JS rendering)
     if "form" in error_str or "field" in error_str or "selector" in error_str:
-        wait_seconds = 2 ** attempt
+        wait_seconds = 2**attempt
         return True, wait_seconds
 
     # Retry browser/playwright errors (usually transient)
     if "browser" in error_str or "playwright" in error_str or "navigation" in error_str:
-        wait_seconds = 2 ** attempt
+        wait_seconds = 2**attempt
         return True, wait_seconds
 
     # Default: don't retry unknown errors
@@ -88,7 +92,7 @@ async def execute_with_retry(
     max_attempts: int = 3,
     on_retry_callback: Optional[Callable] = None,
     context_fields: Optional[dict] = None,
-    **kwargs
+    **kwargs,
 ) -> Any:
     """
     Execute an async function with automatic retry on failure.
@@ -136,7 +140,9 @@ async def execute_with_retry(
             attempt += 1
             last_error = e
 
-            should_retry_result, wait_time = await should_retry(e, attempt - 1, max_attempts)
+            should_retry_result, wait_time = await should_retry(
+                e, attempt - 1, max_attempts
+            )
 
             if not should_retry_result:
                 raise
@@ -185,7 +191,7 @@ class RetryableOperation:
         self.attempt += 1
         logger.debug(
             f"Starting {self.operation_name} (attempt {self.attempt}/{self.max_attempts})",
-            extra_fields={**self.context_fields, "attempt": self.attempt}
+            extra_fields={**self.context_fields, "attempt": self.attempt},
         )
         return self
 
@@ -199,19 +205,23 @@ class RetryableOperation:
                         **self.context_fields,
                         "successful_attempt": self.attempt,
                         "previous_errors": len(self.errors),
-                    }
+                    },
                 )
             return False  # Don't suppress exception
 
         # Exception occurred
-        should_retry, wait_time = await should_retry(exc_val, self.attempt - 1, self.max_attempts)
-        self.errors.append({
-            "attempt": self.attempt,
-            "error": str(exc_val)[:200],
-            "error_type": type(exc_val).__name__,
-        })
+        should_retry_flag, wait_time = await should_retry(
+            exc_val, self.attempt - 1, self.max_attempts
+        )
+        self.errors.append(
+            {
+                "attempt": self.attempt,
+                "error": str(exc_val)[:200],
+                "error_type": type(exc_val).__name__,
+            }
+        )
 
-        if not should_retry or self.attempt >= self.max_attempts:
+        if not should_retry_flag or self.attempt >= self.max_attempts:
             logger.error(
                 f"{self.operation_name} failed permanently",
                 extra_fields={
@@ -219,7 +229,7 @@ class RetryableOperation:
                     "attempt": self.attempt,
                     "max_attempts": self.max_attempts,
                     "error_history": self.errors,
-                }
+                },
             )
             return False  # Re-raise exception
 
@@ -230,14 +240,16 @@ class RetryableOperation:
                 "attempt": self.attempt,
                 "wait_seconds": wait_time,
                 "error": str(exc_val)[:100],
-            }
+            },
         )
 
         await asyncio.sleep(wait_time)
         return True  # Suppress exception, allow retry at call site
 
 
-def calculate_next_retry_time(attempt: int, strategy: RetryStrategy = RetryStrategy.EXPONENTIAL) -> datetime:
+def calculate_next_retry_time(
+    attempt: int, strategy: RetryStrategy = RetryStrategy.EXPONENTIAL
+) -> datetime:
     """
     Calculate when the next retry should happen.
 
@@ -249,7 +261,7 @@ def calculate_next_retry_time(attempt: int, strategy: RetryStrategy = RetryStrat
         UTC datetime when next retry should occur
     """
     if strategy == RetryStrategy.EXPONENTIAL:
-        wait_seconds = 2 ** attempt  # 1, 2, 4, 8, 16, ...
+        wait_seconds = 2**attempt  # 1, 2, 4, 8, 16, ...
     elif strategy == RetryStrategy.LINEAR:
         wait_seconds = attempt * 30  # 0, 30, 60, 90, ...
     else:  # IMMEDIATE

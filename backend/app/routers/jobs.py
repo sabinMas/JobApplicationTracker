@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 job_manager = JobSourceManager()
 
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 async def list_jobs(
     skip: int = 0,
@@ -35,37 +36,40 @@ async def list_jobs(
 ):
     """
     List jobs with pagination and filtering.
-    
+
     Args:
         skip: Number of jobs to skip
         limit: Maximum number of jobs to return
         source: Filter by job source
         status: Filter by status (discovered, applied, rejected)
     """
-    logger.info("Listing jobs", extra_fields={
-        "skip": skip,
-        "limit": limit,
-        "source": source,
-        "status": status,
-    })
-    
+    logger.info(
+        "Listing jobs",
+        extra_fields={
+            "skip": skip,
+            "limit": limit,
+            "source": source,
+            "status": status,
+        },
+    )
+
     query = select(Job)
-    
+
     if source:
         query = query.where(Job.source == source)
-    
+
     if status:
         query = query.where(Job.status == status)
-    
+
     # Order by created_at descending
     query = query.order_by(desc(Job.created_at))
-    
+
     # Apply pagination
     query = query.offset(skip).limit(limit)
-    
+
     result = await db.execute(query)
     jobs = result.scalars().all()
-    
+
     return {
         "total": len(jobs),
         "skip": skip,
@@ -94,27 +98,27 @@ async def sync_jobs(
 ):
     """
     Sync jobs from all configured sources.
-    
+
     This endpoint:
     1. Fetches jobs from all registered sources in parallel
     2. Deduplicates against existing jobs
     3. Stores new jobs in database
-    
+
     Returns sync statistics (added, duplicates, errors)
     """
     logger.info("Starting job sync")
-    
+
     try:
         stats = await job_manager.sync()
-        
+
         logger.info("Job sync completed", extra_fields=stats)
-        
+
         return {
             "status": "success",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "stats": stats,
         }
-    
+
     except Exception as e:
         logger.error(f"Job sync failed: {e}", extra_fields={"error": str(e)})
         raise HTTPException(500, f"Job sync failed: {str(e)}")
@@ -124,7 +128,7 @@ async def sync_jobs(
 async def list_sources():
     """List all configured job sources."""
     logger.info("Listing job sources")
-    
+
     return {
         "sources": [
             {
@@ -144,20 +148,23 @@ async def add_rss_source(
 ):
     """
     Add a new RSS feed job source.
-    
+
     Args:
         feed_url: URL to RSS feed
         name: Optional display name (defaults to domain)
     """
-    logger.info("Adding RSS job source", extra_fields={
-        "feed_url": feed_url,
-        "name": name,
-    })
-    
+    logger.info(
+        "Adding RSS job source",
+        extra_fields={
+            "feed_url": feed_url,
+            "name": name,
+        },
+    )
+
     try:
         source = RSSJobSource(feed_url, name=name)
         job_manager.add_source(source)
-        
+
         return {
             "status": "success",
             "source": {
@@ -166,7 +173,7 @@ async def add_rss_source(
                 "type": "RSS",
             },
         }
-    
+
     except Exception as e:
         logger.error(f"Failed to add RSS source: {e}", extra_fields={"error": str(e)})
         raise HTTPException(400, f"Failed to add RSS source: {str(e)}")
@@ -178,23 +185,23 @@ async def get_job_stats(
 ):
     """Get job statistics by source and status."""
     logger.info("Getting job statistics")
-    
+
     # Get counts by source
     source_result = await db.execute(
         select(Job.source, func.count(Job.id)).group_by(Job.source)
     )
     by_source = {row[0]: row[1] for row in source_result.fetchall()}
-    
+
     # Get counts by status
     status_result = await db.execute(
         select(Job.status, func.count(Job.id)).group_by(Job.status)
     )
     by_status = {row[0]: row[1] for row in status_result.fetchall()}
-    
+
     # Total count
     total_result = await db.execute(select(func.count(Job.id)))
     total = total_result.scalar()
-    
+
     return {
         "total": total,
         "by_source": by_source,
@@ -209,14 +216,14 @@ async def get_job(
 ):
     """Get details of a specific job."""
     logger.info("Getting job details", extra_fields={"job_id": job_id})
-    
+
     result = await db.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
-    
+
     if not job:
         logger.warning("Job not found", extra_fields={"job_id": job_id})
         raise HTTPException(404, "Job not found")
-    
+
     return {
         "id": job.id,
         "title": job.title,
@@ -236,35 +243,40 @@ async def get_job(
     }
 
 
-
 @router.post("/sources/github")
 async def add_github_source(
     access_token: Optional[str] = None,
 ):
     """
     Add GitHub Jobs API source (no authentication required, but optional for rate limit increases).
-    
+
     Args:
         access_token: Optional GitHub personal access token (for authenticated requests)
-    
+
     Returns:
         Confirmation that GitHub source was added
     """
-    logger.info("Adding GitHub Jobs source", extra_fields={
-        "has_token": access_token is not None,
-    })
-    
+    logger.info(
+        "Adding GitHub Jobs source",
+        extra_fields={
+            "has_token": access_token is not None,
+        },
+    )
+
     try:
         from ..services.job_sources import GitHubJobSource
-        
+
         source = GitHubJobSource(access_token=access_token)
         job_manager.add_source(source)
-        
-        logger.info("GitHub source configured", extra_fields={
-            "source": "GitHub Jobs",
-            "authenticated": access_token is not None,
-        })
-        
+
+        logger.info(
+            "GitHub source configured",
+            extra_fields={
+                "source": "GitHub Jobs",
+                "authenticated": access_token is not None,
+            },
+        )
+
         return {
             "status": "success",
             "source": {
@@ -275,9 +287,11 @@ async def add_github_source(
                 "note": "GitHub Jobs API is deprecated but still functional",
             },
         }
-    
+
     except Exception as e:
-        logger.error(f"Failed to add GitHub source: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Failed to add GitHub source: {e}", extra_fields={"error": str(e)}
+        )
         raise HTTPException(400, f"Failed to add GitHub source: {str(e)}")
 
 
@@ -288,39 +302,45 @@ async def add_linkedin_source(
 ):
     """
     Add LinkedIn API job source.
-    
+
     Requires OAuth 2.0 credentials:
     - client_id: LinkedIn app client ID
     - client_secret: LinkedIn app client secret
-    
+
     Args:
         client_id: LinkedIn OAuth client ID
         client_secret: LinkedIn OAuth client secret
-    
+
     Returns:
         Confirmation that LinkedIn source was added
     """
-    logger.info("Adding LinkedIn job source", extra_fields={
-        "client_id_prefix": client_id[:8] if client_id else None,
-    })
-    
+    logger.info(
+        "Adding LinkedIn job source",
+        extra_fields={
+            "client_id_prefix": client_id[:8] if client_id else None,
+        },
+    )
+
     try:
         from ..services.job_sources import LinkedInJobSource
-        
+
         if not client_id or not client_secret:
             raise ValueError("client_id and client_secret are required")
-        
+
         source = LinkedInJobSource(
             client_id=client_id,
             client_secret=client_secret,
         )
         job_manager.add_source(source)
-        
-        logger.info("LinkedIn source configured", extra_fields={
-            "source": "LinkedIn",
-            "configured": source.is_configured,
-        })
-        
+
+        logger.info(
+            "LinkedIn source configured",
+            extra_fields={
+                "source": "LinkedIn",
+                "configured": source.is_configured,
+            },
+        )
+
         return {
             "status": "success",
             "source": {
@@ -330,9 +350,11 @@ async def add_linkedin_source(
                 "message": "LinkedIn source added. Note: LinkedIn standard API has limitations. Consider using Recruiter API or web scraping.",
             },
         }
-    
+
     except Exception as e:
-        logger.error(f"Failed to add LinkedIn source: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Failed to add LinkedIn source: {e}", extra_fields={"error": str(e)}
+        )
         raise HTTPException(400, f"Failed to add LinkedIn source: {str(e)}")
 
 
@@ -342,27 +364,27 @@ async def add_angellist_source(
 ):
     """
     Add Angel List (Wellfound) API job source.
-    
+
     Requires:
     - api_key: Angel List / Wellfound API key
-    
+
     Args:
         api_key: Angel List API key
-    
+
     Returns:
         Confirmation that Angel List source was added
     """
     logger.info("Adding Angel List job source")
-    
+
     try:
         from ..services.job_sources import AngelListJobSource
-        
+
         if not api_key:
             raise ValueError("api_key is required")
-        
+
         source = AngelListJobSource(api_key=api_key)
         job_manager.add_source(source)
-        
+
         return {
             "status": "success",
             "source": {
@@ -371,9 +393,11 @@ async def add_angellist_source(
                 "configured": source.is_configured,
             },
         }
-    
+
     except Exception as e:
-        logger.error(f"Failed to add Angel List source: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Failed to add Angel List source: {e}", extra_fields={"error": str(e)}
+        )
         raise HTTPException(400, f"Failed to add Angel List source: {str(e)}")
 
 
@@ -383,27 +407,28 @@ async def add_lever_source(
 ):
     """
     Add Lever API job source for direct application submission.
-    
+
     Requires:
     - api_key: Lever API key (for direct job posting API, not recruitment)
-    
+
     Args:
         api_key: Lever API key
-    
+
     Returns:
         Confirmation that Lever source was added
     """
     logger.info("Adding Lever job source")
-    
+
     try:
         # Note: This would require a LeverJobSource class if implementing job scraping
         # For now, Lever is primarily used for application routing, not job discovery
         # This endpoint is for future expansion if Lever job scraping is added
-        
+
         # Store in environment or config
         import os
+
         os.environ["LEVER_API_KEY"] = api_key
-        
+
         return {
             "status": "success",
             "source": {
@@ -413,7 +438,9 @@ async def add_lever_source(
                 "use_case": "Direct application submission to Lever-based ATSs",
             },
         }
-    
+
     except Exception as e:
-        logger.error(f"Failed to configure Lever source: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Failed to configure Lever source: {e}", extra_fields={"error": str(e)}
+        )
         raise HTTPException(400, f"Failed to configure Lever source: {str(e)}")

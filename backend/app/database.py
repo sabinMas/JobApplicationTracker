@@ -8,7 +8,7 @@ load_dotenv()
 
 # Database URL configuration
 # Supports both SQLite (development) and PostgreSQL (production)
-# 
+#
 # SQLite:     sqlite+aiosqlite:///./data/app.db
 # PostgreSQL: postgresql+asyncpg://user:pass@host:5432/dbname
 #
@@ -16,7 +16,9 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 if not DATABASE_URL:
     # Default to SQLite for local development
-    DATA_DIR = Path(os.getenv("DATA_DIR", str(Path(__file__).parent.parent.parent / "data")))
+    DATA_DIR = Path(
+        os.getenv("DATA_DIR", str(Path(__file__).parent.parent.parent / "data"))
+    )
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     DATABASE_URL = f"sqlite+aiosqlite:///{DATA_DIR}/app.db"
 
@@ -35,13 +37,15 @@ engine_kwargs = {
 
 if not is_sqlite:
     # PostgreSQL connection pool settings
-    engine_kwargs.update({
-        "pool_size": 5,
-        "max_overflow": 10,
-        "pool_timeout": 30,
-        "pool_recycle": 1800,  # Recycle connections every 30 min
-        "pool_pre_ping": True,  # Verify connections before use
-    })
+    engine_kwargs.update(
+        {
+            "pool_size": 5,
+            "max_overflow": 10,
+            "pool_timeout": 30,
+            "pool_recycle": 1800,  # Recycle connections every 30 min
+            "pool_pre_ping": True,  # Verify connections before use
+        }
+    )
 
 engine = create_async_engine(DATABASE_URL, **engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)

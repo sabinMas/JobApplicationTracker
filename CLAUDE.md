@@ -39,7 +39,7 @@ These are non-negotiable. Violating them will be caught in review.
 - **Routers are thin.** A router function calls a service and returns the result. No business logic in routers.
 - **Services own business logic.** All non-trivial logic goes in `backend/app/services/`.
 - **Frontend talks only to the FastAPI backend.** No direct AWS SDK calls from the React app (no `@aws-sdk/client-lambda` in frontend code).
-- **Do not add new top-level root files.** Scripts, configs, and documentation belong in their respective subdirectories (`infra/`, `docs/`, `backend/`, `frontend/`). The root contains only `README.md`, `AGENT.md`, `CLAUDE.md`, `docker-compose.yml`, `Dockerfile`, `railway.json`, `vercel.json`, and deploy scripts.
+- **Do not add new top-level root files.** Scripts, configs, and documentation belong in their respective subdirectories (`infra/`, `docs/`, `backend/`, `frontend/`). The root contains only `README.md`, `AGENT.md`, `CLAUDE.md`, `docker-compose.yml`, `Dockerfile.api`, `Dockerfile.worker`, `Dockerfile.lambda`, and `vercel.json`.
 
 ### 2.4 Documentation
 - **Update `CLAUDE.md`** any time you add a service, router, data model field, or change a core workflow.
@@ -155,8 +155,8 @@ JobApplicationTracker/
 | ORM | SQLAlchemy (async) | 2.0.36 | Never use sync Session |
 | Validation | Pydantic | 2.10.3 | All request/response schemas |
 | Browser automation | Playwright | 1.49.0 | Chromium, headed in dev |
-| AI model (primary) | Claude 3 Haiku / Sonnet | via AWS Bedrock | Two-tier: Haiku for extraction, Sonnet for tailoring |
-| AI model (fallback) | Cerebras `llama-3.3-70b` | via OpenAI SDK | Optional fallback if Bedrock unavailable |
+| AI model (primary) | Claude 3 Haiku / Sonnet via AWS Bedrock | via boto3 | Two-tier: Haiku for extraction, Sonnet for tailoring. Entry point: `ai_service.py` |
+| AI model (fallback) | Cerebras `llama-3.3-70b` | via OpenAI SDK | Called only if Bedrock unavailable |
 | PDF extraction | pdfplumber | 0.11.4 | Resume text extraction |
 | PDF generation | ReportLab | 4.2.5 | Tailored resume output |
 | HTTP client | httpx | 0.28.0 | Async, never `requests` |
@@ -226,6 +226,25 @@ Defined in `backend/app/models.py`. Do not alter models without a migration plan
 ### ApplicationMetric
 Tracks every submission attempt for analytics — timing, status, ATS platform, error type.
 
+### SearchPreferences (Phase 4+)
+| Field | Type | Notes |
+|---|---|---|
+| `keywords`, `location` | String | Search filter params |
+| `min_score` | Integer | Only apply to jobs ≥ this score |
+| `job_types`, `sources` | JSON `[]` | Allowed job types / sources |
+| `is_active` | Boolean | Whether auto-discovery is running |
+
+### Actor (Phase 5)
+| Field | Type | Notes |
+|---|---|---|
+| `name`, `type` | String | Actor identity and category |
+| `status` | String | `active \| paused \| error` |
+| `config` | JSON `{}` | Actor-specific config (URLs, rate limits) |
+| `last_run_at`, `next_run_at` | DateTime | Scheduling state |
+
+### PipelineRun / ScraperRun / Dataset
+Internal Phase 5 pipeline tracking models — see `backend/app/models.py` for full field definitions.
+
 ---
 
 ## 6. Core Workflows
@@ -244,10 +263,10 @@ POST /api/profile/extract  { PDF resume file }
 
 ### 6.2 Job Discovery
 ```
-EventBridge (daily 8 AM) OR POST /api/scheduler/apply-now
-  → job_sync_scheduler.py → job_sources/{linkedin,github,angellist,rss}_source.py
-  → scraper_service.py (BeautifulSoup)
-  → ai_service.extract_job(page_text) via Claude Haiku → Job record created, status="discovered"
+EventBridge (daily 8 AM) OR SQS message → worker_main.py
+  → actor_runner.py → scrapers/{linkedin,indeed,github}_actor.py
+  → job_enrichment.py → ai_service.extract_job(page_text) via Claude Haiku
+  → Job record created, status="discovered"
   → job_scorer.py → ai_service.structured() → score 1–10 written to Job
 ```
 
@@ -340,10 +359,13 @@ WebSocket event shape:
 
 ### Environment Variables
 ```
-# AWS (required for primary AI provider via Bedrock)
-AWS_REGION=us-east-1
+# AWS (required for primary AI provider via Bedrock — IAM role in prod, keys in dev)
+AWS_DEFAULT_REGION=us-east-1
 AWS_ACCESS_KEY_ID=your_key_here
 AWS_SECRET_ACCESS_KEY=your_secret_here
+
+# Fallback AI provider (optional — only needed if Bedrock unavailable)
+CEREBRAS_API_KEY=your_key_here
 
 # AI Models (optional — defaults use Claude Haiku + Sonnet)
 # BEDROCK_FAST_MODEL=anthropic.claude-3-haiku-20240307-v1:0
@@ -359,6 +381,9 @@ DATABASE_URL=sqlite+aiosqlite:///../data/app.db
 ALLOWED_ORIGINS=http://localhost:5173
 ENVIRONMENT=development
 S3_BUCKET_NAME=jobtracker-documents-245091941294
+
+# Frontend (set in Vercel dashboard for production)
+VITE_API_URL=https://l5o4ygtmeb.execute-api.us-east-1.amazonaws.com
 ```
 
 ### Running Locally
@@ -433,7 +458,9 @@ pytest backend/ -v -k "test_apply"  # filter by name
 | Job enrichment pipeline | `backend/app/services/job_enrichment.py` |
 | Playwright browser automation | `backend/app/services/playwright_service.py` |
 | **AI & Application** | |
-| Cerebras AI integration | `backend/app/services/cerebras_service.py` |
+| **AI entry point (use this)** | `backend/app/services/ai_service.py` |
+| Bedrock Nova integration | `backend/app/services/bedrock_service.py` |
+| Cerebras fallback | `backend/app/services/cerebras_service.py` |
 | Form fill + submit logic | `backend/app/services/auto_submit.py` |
 | ATS detection | `backend/app/services/ats_integration.py` |
 | Job scoring | `backend/app/services/job_scorer.py` |
@@ -441,8 +468,9 @@ pytest backend/ -v -k "test_apply"  # filter by name
 | **Infrastructure & DevOps** | |
 | Docker API container | `Dockerfile.api` |
 | Docker worker container | `Dockerfile.worker` |
-| ECS auto-scaling setup | `infra/setup-worker-autoscaling.ps1` |
-| Application Load Balancer setup | `infra/setup-alb.ps1` |
+| Docker Lambda container | `Dockerfile.lambda` |
+| ECS auto-scaling setup | `infra/scripts/setup-worker-autoscaling.ps1` |
+| ECS Fargate setup | `infra/scripts/setup-ecs-fargate.ps1` |
 | **Documentation** | |
 | Testing guide | `docs/TESTING_GUIDE.md` |
 | Structured logging setup | `backend/app/logging_config.py` |
@@ -476,6 +504,20 @@ Before any PR:
 
 ---
 
+---
+
+## 14. Multi-Agent Development Rules
+
+This project uses three parallel coding agents with strict domain separation. Before writing any code, every agent must read `docs/AGENT_RULES.md` in full. Key rules:
+
+- **Fresh-start protocol**: Pull master, read CLAUDE.md + AGENT_RULES.md, review git log before touching anything
+- **Domain isolation**: Backend agent owns `backend/`, Frontend agent owns `frontend/` + `vercel.json`, Infra agent owns `infra/` + `Dockerfile.*` + `.github/`
+- **Commit cadence**: Every ~75–100 lines changed or every completed logical unit — whichever comes first
+- **PR gates**: All four CI jobs (`backend-lint`, `backend-test`, `frontend-build`, `secrets-scan`) must be green before merge
+- **AI calls**: Always route through `ai_service.py` — never call provider modules directly
+
+---
+
 **Maintained by**: Mason  
 **Last updated**: June 2026  
-**Version**: 2.0
+**Version**: 3.0
