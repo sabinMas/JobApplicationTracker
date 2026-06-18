@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 
-const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.223.146'
+const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.225.146'
 
 export default async (req: VercelRequest, res: VercelResponse) => {
   const { route } = req.query
@@ -8,8 +8,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   const path = `/${pathSegments.join('/')}`
 
   try {
-    const method = req.method || 'GET'
-    const headers: HeadersInit = {
+    const reqMethod = req.method || 'GET'
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
 
@@ -18,18 +18,18 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       headers['Authorization'] = req.headers.authorization as string
     }
 
-    const fetchOptions: RequestInit = {
-      method,
+    const fetchOptions: Record<string, any> = {
+      method: reqMethod,
       headers,
     }
 
     // Forward body for POST/PUT/PATCH requests
-    if (method !== 'GET' && method !== 'HEAD' && req.body) {
+    if (reqMethod !== 'GET' && reqMethod !== 'HEAD' && req.body) {
       fetchOptions.body = JSON.stringify(req.body)
     }
 
     // Handle file uploads (FormData)
-    if (req.headers['content-type']?.includes('multipart/form-data')) {
+    if ((req.headers['content-type'] as string)?.includes('multipart/form-data')) {
       delete headers['Content-Type'] // Let fetch set it with boundary
       fetchOptions.body = req.body
     }
@@ -39,7 +39,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       .toString()
     const fullUrl = `${BACKEND_URL}/api${path}${queryString ? `?${queryString}` : ''}`
 
-    const response = await fetch(fullUrl, fetchOptions)
+    const response = await fetch(fullUrl, fetchOptions as RequestInit)
     const contentType = response.headers.get('content-type')
 
     // Set CORS headers
@@ -59,7 +59,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     }
     return res.status(response.status).send(Buffer.from(buffer))
   } catch (error) {
-    console.error(`Proxy error for ${method} ${path}:`, error)
+    console.error(`Proxy error for ${req.method} ${path}:`, error)
     return res.status(502).json({
       detail: `Backend unavailable: ${(error as Error).message}`,
     })
