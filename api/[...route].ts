@@ -1,6 +1,10 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
+import https from 'https'
 
 const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.223.146:8000'
+
+// Allow self-signed certificates (for nginx reverse proxy with self-signed SSL)
+const httpsAgent = new https.Agent({ rejectUnauthorized: false })
 
 export default async (req: VercelRequest, res: VercelResponse) => {
   const { route, ...restQuery } = req.query
@@ -39,7 +43,10 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       .toString()
     const fullUrl = `${BACKEND_URL}/api${path}${queryString ? `?${queryString}` : ''}`
 
-    const response = await fetch(fullUrl, fetchOptions as RequestInit)
+    const response = await fetch(fullUrl, {
+      ...fetchOptions,
+      agent: fullUrl.startsWith('https') ? httpsAgent : undefined,
+    } as RequestInit)
     const contentType = response.headers.get('content-type')
 
     // Set CORS headers
