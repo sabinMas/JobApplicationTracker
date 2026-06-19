@@ -2,12 +2,6 @@
   "buildCommand": "npm install && cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "npm install && cd frontend && npm install",
-  "functions": {
-    "api/**": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 60
-    }
-  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",
