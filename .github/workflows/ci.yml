@@ -125,9 +125,14 @@ jobs:
             cd /opt/jobtracker
             git pull origin master
             ./backend/venv/bin/pip install -r backend/requirements.txt -q
+
+            # Setup nginx + SSL (idempotent, runs only if needed)
+            bash infra/scripts/setup-ec2-nginx.sh
+
+            # Restart backend service
             sudo systemctl restart jobtracker
-            sudo systemctl enable nginx
-            sudo systemctl start nginx || sudo systemctl restart nginx
             sleep 3
+
+            # Verify both services are running
             systemctl is-active jobtracker && echo "jobtracker running OK" || (journalctl -u jobtracker -n 20 --no-pager && exit 1)
             systemctl is-active nginx && echo "nginx running OK" || (journalctl -u nginx -n 20 --no-pager && exit 1)

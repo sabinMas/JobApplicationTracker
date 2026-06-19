@@ -383,7 +383,10 @@ ENVIRONMENT=development
 S3_BUCKET_NAME=jobtracker-documents-245091941294
 
 # Frontend (set in Vercel dashboard for production)
-VITE_API_URL=https://l5o4ygtmeb.execute-api.us-east-1.amazonaws.com
+# For EC2 deployment: use the EC2 public IP or domain
+# VITE_API_URL=https://your-ec2-public-ip  (e.g. https://54.237.223.146)
+# For API Gateway: https://your-api-id.execute-api.us-east-1.amazonaws.com
+VITE_API_URL=https://54.237.223.146
 ```
 
 ### Running Locally
@@ -413,18 +416,22 @@ pytest backend/ -v -k "test_apply"  # filter by name
 
 | Component | Status | Detail |
 |---|---|---|
-| Frontend (Vercel) | ✅ Live | Auto-deploys on push to master |
-| ECS Fargate API | ✅ Active | FastAPI service in Fargate, 1 GB RAM, auto-scaling enabled |
-| ECS Fargate Worker | ✅ Active | SQS-based scraper worker, scales 1-5 tasks based on queue depth |
+| Frontend (Vercel) | ✅ Live | Auto-deploys on push to master; `VITE_API_URL` env var configurable |
+| EC2 API Backend | ✅ Running | FastAPI + uvicorn on `:8000`, auto-restart on deploy |
+| nginx (EC2) | ✅ Active | SSL reverse proxy on `:443`, proxies to uvicorn, self-signed cert |
+| CI/CD (GitHub Actions) | ✅ Active | Auto-deploys to EC2 on push to `master`; nginx setup idempotent |
 | PostgreSQL (RDS) | ✅ Ready | Connected, scoring columns migration applied |
 | S3 bucket | ✅ Available | `jobtracker-documents-245091941294`, JSONL results storage enabled |
-| SQS Queue | ✅ Active | `jobtracker-scraper-queue`, dead-letter queue configured |
 | CloudWatch Logs | ✅ Logging | Structured JSON logging for all components |
-| Application Load Balancer | ⚠️ Optional | Script ready but requires `elasticloadbalancing:CreateLoadBalancer` IAM permission |
-| All 4 Actors | ✅ Active | Test, LinkedIn, Indeed, GitHub scrapers registered and functional |
-| Job Enrichment Pipeline | ✅ Active | Auto-triggers on jobs with score ≥ 7, source-based actor routing |
+| All 4 Actors | ✅ Functional | Test, LinkedIn, Indeed, GitHub scrapers integrated (can run on EC2 or SQS) |
 
-**Infrastructure ready for real-world testing** — all critical components operational on ECS with auto-scaling and monitoring.
+**Current Stack**: EC2 + nginx + FastAPI (simpler than ECS, faster deploys, 15-second turnaround). Dashboard and auto-apply fully functional. For production scale, can migrate to ECS/Lambda.
+
+### Deployment Flow
+1. Push to `master` → GitHub Actions runs CI tests
+2. All tests pass → SSH deploy to EC2
+3. EC2 runs `git pull`, installs deps, runs `setup-ec2-nginx.sh` (if needed)
+4. nginx + uvicorn restart → API live on `https://EC2_IP/api`
 
 ---
 
@@ -466,11 +473,18 @@ pytest backend/ -v -k "test_apply"  # filter by name
 | Job scoring | `backend/app/services/job_scorer.py` |
 | Retry logic | `backend/app/services/retry_service.py` |
 | **Infrastructure & DevOps** | |
+| EC2 initial setup | `infra/scripts/setup-ec2.sh` |
+| EC2 nginx + SSL | `infra/scripts/setup-ec2-nginx.sh` |
+| CI/CD workflow | `.github/workflows/ci.yml` |
 | Docker API container | `Dockerfile.api` |
 | Docker worker container | `Dockerfile.worker` |
 | Docker Lambda container | `Dockerfile.lambda` |
 | ECS auto-scaling setup | `infra/scripts/setup-worker-autoscaling.ps1` |
 | ECS Fargate setup | `infra/scripts/setup-ecs-fargate.ps1` |
+| **Deployment Guides** | |
+| EC2 deployment guide | `docs/EC2_SETUP.md` |
+| Quick fix guide | `FIX_DEPLOYMENT_NOW.md` |
+| Deployment issue analysis | `DEPLOYMENT_ISSUE_ANALYSIS.md` |
 | **Documentation** | |
 | Testing guide | `docs/TESTING_GUIDE.md` |
 | Structured logging setup | `backend/app/logging_config.py` |
