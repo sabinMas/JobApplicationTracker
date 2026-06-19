@@ -1,9 +1,9 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 
-const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.225.146'
+const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.223.146'
 
 export default async (req: VercelRequest, res: VercelResponse) => {
-  const { route } = req.query
+  const { route, ...restQuery } = req.query
   const pathSegments = Array.isArray(route) ? route : [route]
   const path = `/${pathSegments.join('/')}`
 
@@ -34,8 +34,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       fetchOptions.body = req.body
     }
 
-    // Build query string
-    const queryString = new URLSearchParams(req.query as Record<string, string>)
+    // Build query string — exclude the internal 'route' catch-all param
+    const queryString = new URLSearchParams(restQuery as Record<string, string>)
       .toString()
     const fullUrl = `${BACKEND_URL}/api${path}${queryString ? `?${queryString}` : ''}`
 
@@ -64,13 +64,4 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       detail: `Backend unavailable: ${(error as Error).message}`,
     })
   }
-}
-
-// Handle preflight requests
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-    },
-  },
 }
