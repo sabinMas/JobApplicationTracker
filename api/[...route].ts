@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 
-const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.223.146'
+const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.223.146:8000'
 
 export default async (req: VercelRequest, res: VercelResponse) => {
   const { route, ...restQuery } = req.query
