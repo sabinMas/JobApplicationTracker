@@ -1,5 +1,17 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 
+// The backend is a bare IP behind nginx that redirects HTTP -> HTTPS and serves
+// a self-signed certificate (no valid CA cert is possible without a domain).
+// Node's built-in fetch (undici) rejects self-signed certs with
+// DEPTH_ZERO_SELF_SIGNED_CERT, and it ignores the `agent` option, so we disable
+// TLS verification process-wide for this proxy function. This is the documented
+// way to make the native fetch accept self-signed certs.
+//
+// SECURITY TRADEOFF: this disables MITM protection on the proxy -> backend hop.
+// Acceptable only for a single-user, bare-IP backend. Long-term fix: give the
+// backend a real domain + Let's Encrypt cert and remove this line.
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
 // Statically-named proxy function. All /api/* requests are rewritten to
 // /api/proxy?path=<segments> by vercel.json, so this does NOT depend on
 // dynamic catch-all route registration (which proved unreliable for
