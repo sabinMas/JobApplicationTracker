@@ -221,7 +221,7 @@ class JobSourceManager:
             # Sync to database
             stats = await self.sync_to_database(jobs_by_source)
 
-            logger.info("Sync completed successfully", extra={"extra_fields": stats})
+            logger.info("Sync completed successfully", extra_fields=stats)
 
             return stats
 

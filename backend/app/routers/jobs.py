@@ -43,19 +43,13 @@ async def list_jobs(
         source: Filter by job source
         status: Filter by status (discovered, applied, rejected)
     """
-    # Use standard `extra=` kwarg so this works whether the logger is the custom
-    # StructuredLogger or the stdlib Logger (the logger class may be set to
-    # StructuredLogger only after module import, causing extra_fields= to fail
-    # with a plain Logger instance on the live server).
     logger.info(
         "Listing jobs",
-        extra={
-            "extra_fields": {
-                "skip": skip,
-                "limit": limit,
-                "source": source,
-                "status": status,
-            }
+        extra_fields={
+            "skip": skip,
+            "limit": limit,
+            "source": source,
+            "status": status,
         },
     )
 
@@ -117,7 +111,7 @@ async def sync_jobs(
     try:
         stats = await job_manager.sync()
 
-        logger.info("Job sync completed", extra={"extra_fields": stats})
+        logger.info("Job sync completed", extra_fields=stats)
 
         return {
             "status": "success",
@@ -126,7 +120,8 @@ async def sync_jobs(
         }
 
     except Exception as e:
-        logger.error(f"Job sync failed: {e}", extra={"extra_fields": {"error": str(e)}})
+        logger.error(f"Job sync failed: {e}", extra_fields={"error": str(e)})
+        raise HTTPException(500, f"Job sync failed: {str(e)}")
 
 
 @router.get("/sources")
@@ -160,11 +155,9 @@ async def add_rss_source(
     """
     logger.info(
         "Adding RSS job source",
-        extra={
-            "extra_fields": {
-                "feed_url": feed_url,
-                "name": name,
-            }
+        extra_fields={
+            "feed_url": feed_url,
+            "name": name,
         },
     )
 
@@ -182,9 +175,7 @@ async def add_rss_source(
         }
 
     except Exception as e:
-        logger.error(
-            f"Failed to add RSS source: {e}", extra={"extra_fields": {"error": str(e)}}
-        )
+        logger.error(f"Failed to add RSS source: {e}", extra_fields={"error": str(e)})
         raise HTTPException(400, f"Failed to add RSS source: {str(e)}")
 
 
@@ -224,13 +215,13 @@ async def get_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Get details of a specific job."""
-    logger.info("Getting job details", extra={"extra_fields": {"job_id": job_id}})
+    logger.info("Getting job details", extra_fields={"job_id": job_id})
 
     result = await db.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
 
     if not job:
-        logger.warning("Job not found", extra={"extra_fields": {"job_id": job_id}})
+        logger.warning("Job not found", extra_fields={"job_id": job_id})
         raise HTTPException(404, "Job not found")
 
     return {
