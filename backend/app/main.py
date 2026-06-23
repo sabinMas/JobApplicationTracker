@@ -122,20 +122,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include all routers
-app.include_router(jobs.router)
-app.include_router(applications.router)
-app.include_router(profile.router)
-app.include_router(documents.router)
-app.include_router(ai.router)
-app.include_router(automation.router)
-app.include_router(auto_apply.router)
-app.include_router(scheduler.router)
-app.include_router(metrics.router)
-app.include_router(dashboard.router)  # Phase 4: Dashboard API
-app.include_router(auto_apply_scored.router)  # Phase 4: Scoring integration
-app.include_router(scraper.router)  # Actor-based scraper framework
-app.include_router(job_enrichment.router)  # Phase 5: Job enrichment pipeline
+# Include all routers with /api prefix
+app.include_router(jobs.router, prefix="/api")
+app.include_router(applications.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
+app.include_router(documents.router, prefix="/api")
+app.include_router(ai.router, prefix="/api")
+app.include_router(automation.router, prefix="/api")
+app.include_router(auto_apply.router, prefix="/api")
+app.include_router(scheduler.router, prefix="/api")
+app.include_router(metrics.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")  # Phase 4: Dashboard API
+app.include_router(auto_apply_scored.router, prefix="/api")  # Phase 4: Scoring integration
+app.include_router(scraper.router, prefix="/api")  # Actor-based scraper framework
+app.include_router(job_enrichment.router, prefix="/api")  # Phase 5: Job enrichment pipeline
 
 # WebSocket route is registered inside automation router as /api/automation/ws/{session_id}
 
