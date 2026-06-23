@@ -1,6 +1,8 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 
-const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.223.146:8000'
+// Fallback targets port 80 (nginx), since port 8000 is blocked by the EC2 security group.
+// In production, BACKEND_API_URL should be set in the Vercel dashboard.
+const BACKEND_URL = process.env.BACKEND_API_URL || 'http://54.237.223.146'
 
 export default async (req: VercelRequest, res: VercelResponse) => {
   const { route, ...restQuery } = req.query
