@@ -132,12 +132,12 @@ app.include_router(automation.router, prefix="/api")
 app.include_router(auto_apply.router, prefix="/api")
 app.include_router(scheduler.router, prefix="/api")
 app.include_router(metrics.router, prefix="/api")
-app.include_router(dashboard.router, prefix="/api")  # Phase 4: Dashboard API
-app.include_router(auto_apply_scored.router, prefix="/api")  # Phase 4: Scoring integration
-app.include_router(scraper.router, prefix="/api")  # Actor-based scraper framework
-app.include_router(job_enrichment.router, prefix="/api")  # Phase 5: Job enrichment pipeline
+app.include_router(dashboard.router, prefix="/api")  # Dashboard API
+app.include_router(auto_apply_scored.router, prefix="/api")  # Scoring integration
+app.include_router(scraper.router, prefix="/api")  # Actor-based scraper
+app.include_router(job_enrichment.router, prefix="/api")  # Job enrichment pipeline
 
-# WebSocket route is registered inside automation router as /api/automation/ws/{session_id}
+# WebSocket: /api/automation/ws/{session_id}
 
 
 @app.get("/health")
