@@ -1,0 +1,77 @@
+import { VercelRequest, VercelResponse } from '@vercel/node'
+
+// Statically-named proxy function. All /api/* requests are rewritten to
+// /api/proxy?path=<segments> by vercel.json, so this does NOT depend on
+// dynamic catch-all route registration (which proved unreliable for
+// multi-segment paths in this project's Vite + outputDirectory setup).
+//
+// Fallback targets port 80 (nginx); port 8000 is blocked by the EC2 security
+// group. In production, BACKEND_API_URL should be set in the Vercel dashboard.
+const BACKEND_URL = (process.env.BACKEND_API_URL || 'http://54.237.223.146').replace(/\/+$/, '')
+
+export default async (req: VercelRequest, res: VercelResponse) => {
+  // The original path after /api is delivered via the rewrite's `path` param.
+  const rawPath = req.query.path
+  const pathStr = Array.isArray(rawPath) ? rawPath.join('/') : (rawPath || '')
+  const path = pathStr ? `/${pathStr.replace(/^\/+/, '')}` : ''
+
+  // Forward every query param except the internal `path` capture.
+  const { path: _omit, ...restQuery } = req.query
+  const flatQuery: Record<string, string> = {}
+  for (const [k, v] of Object.entries(restQuery)) {
+    flatQuery[k] = Array.isArray(v) ? v.join(',') : (v as string)
+  }
+  const queryString = new URLSearchParams(flatQuery).toString()
+
+  const fullUrl = `${BACKEND_URL}/api${path}${queryString ? `?${queryString}` : ''}`
+
+  // CORS headers (set early so they apply to error responses too).
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+  const reqMethod = req.method || 'GET'
+  if (reqMethod === 'OPTIONS') {
+    return res.status(204).end()
+  }
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (req.headers.authorization) {
+      headers['Authorization'] = req.headers.authorization as string
+    }
+
+    const fetchOptions: Record<string, any> = { method: reqMethod, headers }
+
+    if (reqMethod !== 'GET' && reqMethod !== 'HEAD' && req.body) {
+      fetchOptions.body = JSON.stringify(req.body)
+    }
+
+    // File uploads (FormData): let fetch set the multipart boundary.
+    if ((req.headers['content-type'] as string)?.includes('multipart/form-data')) {
+      delete headers['Content-Type']
+      fetchOptions.body = req.body
+    }
+
+    const response = await fetch(fullUrl, fetchOptions as RequestInit)
+    const contentType = response.headers.get('content-type')
+
+    if (contentType?.includes('application/json')) {
+      const data = await response.json()
+      return res.status(response.status).json(data)
+    }
+
+    const buffer = await response.arrayBuffer()
+    if (contentType) res.setHeader('Content-Type', contentType)
+    return res.status(response.status).send(Buffer.from(buffer))
+  } catch (error) {
+    const err = error as Error & { cause?: { code?: string; message?: string } }
+    const cause = err.cause
+    console.error(`Proxy error for ${reqMethod} ${fullUrl}:`, err, cause)
+    return res.status(502).json({
+      detail: `Backend unavailable: ${err.message}`,
+      cause: cause ? `${cause.code || ''} ${cause.message || cause}`.trim() : undefined,
+      target: fullUrl,
+    })
+  }
+}
