@@ -25,6 +25,24 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 job_manager = JobSourceManager()
 
 
+@router.get("/debug-error", include_in_schema=False)
+async def debug_list_jobs_error(
+    db: AsyncSession = Depends(get_db),
+):
+    """Temporary: catch and return the list_jobs exception for remote diagnosis."""
+    import traceback as tb_mod
+
+    try:
+        result = await list_jobs(skip=0, limit=1, source=None, status=None, db=db)
+        return {"ok": True, "sample": result}
+    except Exception as e:
+        return {
+            "error": type(e).__name__,
+            "message": str(e),
+            "traceback": tb_mod.format_exc(),
+        }
+
+
 @router.get("", include_in_schema=False)
 @router.get("/")
 async def list_jobs(
