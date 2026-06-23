@@ -4,12 +4,15 @@
   "installCommand": "npm install && cd frontend && npm install",
   "routes": [
     {
-      "src": "^/assets/.*$",
-      "dest": "/assets/$1",
+      "src": "^/api/.*$",
       "continue": true
     },
     {
-      "src": "^/(?!api/|assets/).*$",
+      "src": "^/(?!api/).*\\.(?:js|css|jpg|png|gif|svg|woff|woff2|ttf|eot)$",
+      "continue": true
+    },
+    {
+      "src": "^/.*$",
       "dest": "/index.html"
     }
   ]
