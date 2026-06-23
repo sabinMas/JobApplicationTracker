@@ -102,11 +102,18 @@ export interface Document {
   created_at?: string
 }
 
+export interface JobsResponse {
+  total: number
+  skip: number
+  limit: number
+  jobs: Job[]
+}
+
 // ─── API calls ────────────────────────────────────────────────────────────────
 
 // Jobs
 export const getJobs = (params?: Record<string, string>) =>
-  api.get<Job[]>('/jobs', { params }).then(r => r.data)
+  api.get<JobsResponse>('/jobs', { params }).then(r => r.data.jobs)
 
 export const createJob = (data: Partial<Job>) =>
   api.post<Job>('/jobs', data).then(r => r.data)
