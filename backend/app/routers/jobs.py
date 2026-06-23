@@ -19,7 +19,7 @@ from ..services.job_sources import JobSourceManager, RSSJobSource
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 # Global job source manager
 job_manager = JobSourceManager()

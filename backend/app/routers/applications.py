@@ -7,7 +7,7 @@ from ..database import get_db
 from ..models import Application, Job
 from ..schemas import ApplicationCreate, ApplicationUpdate, ApplicationOut
 
-router = APIRouter(prefix="/api/applications", tags=["applications"])
+router = APIRouter(prefix="/applications", tags=["applications"])
 
 
 @router.get("", response_model=List[ApplicationOut])

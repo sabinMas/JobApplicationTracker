@@ -21,7 +21,7 @@ class QuickApplyRequest(BaseModel):
     auto_submit: bool = False
 
 
-router = APIRouter(prefix="/api/automation", tags=["automation"])
+router = APIRouter(prefix="/automation", tags=["automation"])
 
 
 @router.post("/start", response_model=AutomationSessionOut)

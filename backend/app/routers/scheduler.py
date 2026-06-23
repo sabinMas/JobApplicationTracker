@@ -18,7 +18,7 @@ from ..logging_config import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
+router = APIRouter(prefix="/scheduler", tags=["scheduler"])
 
 
 class JobCriteria(BaseModel):

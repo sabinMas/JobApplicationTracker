@@ -15,7 +15,7 @@ from ..models import ApplicationMetric, Application
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/api/metrics", tags=["metrics"])
+router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 
 @router.get("/dashboard")

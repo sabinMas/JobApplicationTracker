@@ -11,7 +11,7 @@ from app.services.actor_framework import actor_registry
 from app.services.actor_runner import enqueue_actor_run
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/scraper", tags=["scraper"])
+router = APIRouter(prefix="/scraper", tags=["scraper"])
 
 
 class RunInput(BaseModel):

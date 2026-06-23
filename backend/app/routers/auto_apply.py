@@ -22,7 +22,7 @@ from ..services.auto_apply_service import (
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/api/auto-apply", tags=["auto-apply"])
+router = APIRouter(prefix="/auto-apply", tags=["auto-apply"])
 
 AUTO_APPLY_MODE = os.getenv("AUTO_APPLY_MODE", "inline")  # inline | queue
 

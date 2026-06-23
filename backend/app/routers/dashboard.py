@@ -20,7 +20,7 @@ from ..schemas import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/metrics", response_model=DashboardMetricsOut)

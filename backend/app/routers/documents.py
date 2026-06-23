@@ -12,7 +12,7 @@ from ..models import Document
 from ..schemas import DocumentOut
 from ..services import pdf_service
 
-router = APIRouter(prefix="/api/documents", tags=["documents"])
+router = APIRouter(prefix="/documents", tags=["documents"])
 
 DATA_DIR = Path(
     os.getenv(

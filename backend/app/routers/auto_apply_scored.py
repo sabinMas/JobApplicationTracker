@@ -22,7 +22,7 @@ from ..schemas import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/auto-apply-scored", tags=["auto-apply-scored"])
+router = APIRouter(prefix="/auto-apply-scored", tags=["auto-apply-scored"])
 
 
 @router.post("/score-jobs", response_model=ScoreJobsOut)

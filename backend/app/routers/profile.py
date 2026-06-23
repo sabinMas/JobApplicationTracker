@@ -17,7 +17,7 @@ from ..schemas import (
 )
 from ..services import ai_service, resume_extractor, profile_service
 
-router = APIRouter(prefix="/api/profile", tags=["profile"])
+router = APIRouter(prefix="/profile", tags=["profile"])
 
 DATA_DIR = Path(
     os.getenv(

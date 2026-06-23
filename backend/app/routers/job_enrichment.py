@@ -7,7 +7,7 @@ from app.database import get_db
 from app.services.job_enrichment import enrich_high_scoring_jobs
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 class EnrichmentResult(BaseModel):

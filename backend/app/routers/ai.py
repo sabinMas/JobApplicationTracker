@@ -8,7 +8,7 @@ from ..schemas import TailorRequest, MapFieldsRequest
 from ..services import ai_service
 from ..services.tailoring_service import TailoringError, tailor_documents_for_job
 
-router = APIRouter(prefix="/api/ai", tags=["ai"])
+router = APIRouter(prefix="/ai", tags=["ai"])
 
 
 @router.post("/tailor")
