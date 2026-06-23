@@ -1,0 +1,31 @@
+VERCEL UPDATE - COPY THESE EXACT STEPS:
+
+1. Go to: https://vercel.com/dashboard
+
+2. Click "JobApplicationTracker" project
+
+3. Click "Settings" (top navigation)
+
+4. Click "Environment Variables" (left sidebar)
+
+5. Find "BACKEND_API_URL" in the list
+
+6. Click the three dots "..." next to it
+
+7. Click "Edit"
+
+8. Change the value from:
+   http://54.237.223.146
+   
+   TO:
+   https://studio-sabin-jobs.click
+
+9. Click "Save"
+
+10. You'll see a prompt asking to redeploy - click "YES" or "Redeploy"
+
+11. Wait for deployment to complete (~2 minutes)
+
+12. Open https://frontend-six-flame-47.vercel.app and refresh
+
+DONE! The blank page should be fixed!
