@@ -48,21 +48,23 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   }
 
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = {}
     if (req.headers.authorization) {
       headers['Authorization'] = req.headers.authorization as string
     }
 
     const fetchOptions: Record<string, any> = { method: reqMethod, headers }
 
-    if (reqMethod !== 'GET' && reqMethod !== 'HEAD' && req.body) {
-      fetchOptions.body = JSON.stringify(req.body)
-    }
-
-    // File uploads (FormData): let fetch set the multipart boundary.
+    // File uploads (FormData): pass through the raw body and let fetch handle content-type.
     if ((req.headers['content-type'] as string)?.includes('multipart/form-data')) {
-      delete headers['Content-Type']
+      // Don't set Content-Type header — let fetch/Node infer it from body
       fetchOptions.body = req.body
+    } else if (reqMethod !== 'GET' && reqMethod !== 'HEAD' && req.body) {
+      headers['Content-Type'] = 'application/json'
+      fetchOptions.body = JSON.stringify(req.body)
+    } else {
+      // No body — set JSON content-type as default
+      headers['Content-Type'] = 'application/json'
     }
 
     const response = await fetch(fullUrl, fetchOptions as RequestInit)
