@@ -7,14 +7,10 @@
       "runtime": "nodejs20.x"
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/proxy?path=:path*"
-    },
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "src": "^/(?!api/).*$",
+      "dest": "/index.html"
     }
   ]
 }
