@@ -2,18 +2,10 @@
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "npm install && cd frontend && npm install",
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/api/.*$",
-      "continue": true
-    },
-    {
-      "src": "^/(?!api/).*\\.(?:js|css|jpg|png|gif|svg|woff|woff2|ttf|eot)$",
-      "continue": true
-    },
-    {
-      "src": "^/.*$",
-      "dest": "/index.html"
+      "source": "/((?!api/|_next/|assets/).)*",
+      "destination": "/index.html"
     }
   ]
 }
