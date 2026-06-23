@@ -52,7 +52,9 @@ def _init_actors():
         actor_registry.register(AgenticScraperActor())
         logger.info("Actors initialized successfully")
     except Exception as e:
-        logger.error(f"Actor init error: {e}", extra={"extra_fields": {"error": str(e)}})
+        logger.error(
+            f"Actor init error: {e}", extra={"extra_fields": {"error": str(e)}}
+        )
 
 
 @asynccontextmanager

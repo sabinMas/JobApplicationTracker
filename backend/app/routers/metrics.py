@@ -128,11 +128,13 @@ async def get_metrics_dashboard(
 
     logger.info(
         "Metrics dashboard retrieved",
-        extra={"extra_fields": {
-            "total_attempts": total_attempts,
-            "success_rate": success_rate,
-            "period_days": days,
-        }},
+        extra={
+            "extra_fields": {
+                "total_attempts": total_attempts,
+                "success_rate": success_rate,
+                "period_days": days,
+            }
+        },
     )
 
     return {

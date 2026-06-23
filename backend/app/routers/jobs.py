@@ -160,10 +160,12 @@ async def add_rss_source(
     """
     logger.info(
         "Adding RSS job source",
-        extra={"extra_fields": {
-            "feed_url": feed_url,
-            "name": name,
-        }},
+        extra={
+            "extra_fields": {
+                "feed_url": feed_url,
+                "name": name,
+            }
+        },
     )
 
     try:
@@ -180,7 +182,9 @@ async def add_rss_source(
         }
 
     except Exception as e:
-        logger.error(f"Failed to add RSS source: {e}", extra={"extra_fields": {"error": str(e)}})
+        logger.error(
+            f"Failed to add RSS source: {e}", extra={"extra_fields": {"error": str(e)}}
+        )
         raise HTTPException(400, f"Failed to add RSS source: {str(e)}")
 
 
