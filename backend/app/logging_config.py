@@ -135,6 +135,12 @@ def get_logger(name: str) -> logging.Logger:
 
     Usage:
         logger = get_logger(__name__)
-        logger.info("Message", extra_fields={"user_id": 123})
+        logger.info("Message", extra={"extra_fields": {"user_id": 123}})
     """
     return logging.getLogger(name)
+
+
+# Register the custom logger class at import time so that any call to
+# logging.getLogger() — including those made before setup_logging() runs —
+# returns a StructuredLogger instance that accepts the extra_fields= kwarg.
+logging.setLoggerClass(StructuredLogger)

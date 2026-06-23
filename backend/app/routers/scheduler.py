@@ -209,7 +209,7 @@ async def trigger_job_sync():
         result = await scheduler.sync_now()
         return result
     except Exception as e:
-        logger.error(f"Job sync failed: {e}", extra_fields={"error": str(e)})
+        logger.error(f"Job sync failed: {e}", extra={"extra_fields": {"error": str(e)}})
         raise HTTPException(500, f"Job sync failed: {str(e)}")
 
 
@@ -229,7 +229,7 @@ async def get_job_sync_config():
         }
 
     config = scheduler.get_config()
-    logger.info("Job sync config retrieved", extra_fields=config)
+    logger.info("Job sync config retrieved", extra={"extra_fields": config})
 
     return config
 

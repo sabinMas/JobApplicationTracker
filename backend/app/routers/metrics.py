@@ -32,7 +32,7 @@ async def get_metrics_dashboard(
     - Breakdown by ATS platform
     - Today's progress
     """
-    logger.info("Fetching metrics dashboard", extra_fields={"days": days})
+    logger.info("Fetching metrics dashboard", extra={"extra_fields": {"days": days}})
 
     now = datetime.now(timezone.utc)
     start_date = now - timedelta(days=days)
@@ -128,11 +128,11 @@ async def get_metrics_dashboard(
 
     logger.info(
         "Metrics dashboard retrieved",
-        extra_fields={
+        extra={"extra_fields": {
             "total_attempts": total_attempts,
             "success_rate": success_rate,
             "period_days": days,
-        },
+        }},
     )
 
     return {
@@ -167,7 +167,7 @@ async def get_recent_errors(
 
     Returns the N most recent failed submission attempts.
     """
-    logger.info("Fetching recent errors", extra_fields={"limit": limit})
+    logger.info("Fetching recent errors", extra={"extra_fields": {"limit": limit}})
 
     result = await db.execute(
         select(ApplicationMetric)
@@ -206,7 +206,7 @@ async def get_application_metrics(
     """
     logger.info(
         "Fetching metrics for application",
-        extra_fields={"application_id": application_id},
+        extra={"extra_fields": {"application_id": application_id}},
     )
 
     # Get application
@@ -318,7 +318,7 @@ async def get_retry_candidates(
 
     Returns failed applications whose next_retry_at is in the past.
     """
-    logger.info("Fetching retry candidates", extra_fields={"limit": limit})
+    logger.info("Fetching retry candidates", extra={"extra_fields": {"limit": limit}})
 
     now = datetime.now(timezone.utc)
 
