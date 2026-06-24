@@ -94,13 +94,13 @@ class JobSourceManager:
         self, jobs_by_source: Dict[str, List[JobListing]]
     ) -> Dict[str, int]:
         """
-        Sync jobs to database with deduplication.
+        Sync jobs to database with deduplication and discovery limits.
 
         Args:
             jobs_by_source: Dict from fetch_all()
 
         Returns:
-            Dict with counts: {"added": X, "duplicates": Y, "errors": Z}
+            Dict with counts: {"added": X, "duplicates": Y, "errors": Z, "limited": Z}
         """
         logger = get_logger_instance()
 
@@ -108,6 +108,7 @@ class JobSourceManager:
             "added": 0,
             "duplicates": 0,
             "errors": 0,
+            "limited": 0,  # Count of jobs not added due to discovery limit
         }
 
         # Collect all jobs with their source
@@ -123,10 +124,28 @@ class JobSourceManager:
             },
         )
 
+        # Load discovery limit from preferences
+        max_discovery_limit = 50  # Default
+        try:
+            from ...models import SearchPreferences
+            async with AsyncSessionLocal() as session:
+                prefs = (
+                    await session.execute(select(SearchPreferences))
+                ).scalar_one_or_none()
+                if prefs and prefs.max_jobs_per_discovery_run:
+                    max_discovery_limit = prefs.max_jobs_per_discovery_run
+        except Exception as e:
+            logger.warning(f"Could not load discovery limit preference: {e}")
+
         # Get existing job URLs to detect duplicates
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(Job.apply_url))
             existing_urls = {row[0] for row in result.fetchall()}
+            
+            # Also load DiscoveredJobURL for deduplication
+            from ...models import DiscoveredJobURL
+            result = await session.execute(select(DiscoveredJobURL.job_url))
+            discovered_urls = {row[0] for row in result.fetchall()}
 
         # Deduplicate and insert
         seen_urls: Set[str] = set()
@@ -134,13 +153,25 @@ class JobSourceManager:
         async with AsyncSessionLocal() as session:
             for source_name, job_listing in all_jobs:
                 try:
+                    # Respect discovery limit
+                    if stats["added"] >= max_discovery_limit:
+                        stats["limited"] += 1
+                        logger.debug(
+                            f"Discovery limit reached ({max_discovery_limit}), skipping job",
+                            extra_fields={
+                                "source": source_name,
+                                "job_title": job_listing.title,
+                            },
+                        )
+                        continue
+
                     # Check for duplicates within this sync
                     if job_listing.apply_url in seen_urls:
                         stats["duplicates"] += 1
                         continue
 
-                    # Check for existing jobs in database
-                    if job_listing.apply_url in existing_urls:
+                    # Check for existing jobs in database or discovered URLs
+                    if job_listing.apply_url in existing_urls or job_listing.apply_url in discovered_urls:
                         stats["duplicates"] += 1
                         logger.debug(
                             f"Job already exists: {job_listing.title}",
@@ -159,6 +190,16 @@ class JobSourceManager:
 
                     job = Job(**job_dict)
                     session.add(job)
+                    await session.flush()  # Get the job ID
+
+                    # Track in DiscoveredJobURL for future deduplication
+                    from ...models import DiscoveredJobURL
+                    discovered_url = DiscoveredJobURL(
+                        job_url=job_listing.apply_url,
+                        source=source_name,
+                        job_id=job.id,
+                    )
+                    session.add(discovered_url)
 
                     stats["added"] += 1
 
@@ -191,6 +232,7 @@ class JobSourceManager:
                         "added": stats["added"],
                         "duplicates": stats["duplicates"],
                         "errors": stats["errors"],
+                        "limited": stats["limited"],
                     },
                 )
             except Exception as e:

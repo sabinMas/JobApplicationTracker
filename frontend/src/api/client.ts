@@ -179,6 +179,9 @@ export const uploadDocument = (file: File, doc_type: string) => {
 export const deleteDocument = (id: number) =>
   api.delete(`/documents/${id}`).then(r => r.data)
 
+export const getDocumentContent = (id: number) =>
+  api.get<{ content: string }>(`/documents/${id}/content`).then(r => r.data.content)
+
 // AI
 export const tailorDocuments = (job_id: number) =>
   api.post('/ai/tailor', { job_id }).then(r => r.data)

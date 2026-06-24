@@ -89,7 +89,7 @@ async def _stage_prepare_and_submit(
                 .where(
                     Job.score >= min_score,
                     Job.score_recommendation == "SUBMIT",
-                    Job.status.in_(["discovered", "enriching"]),
+                    Job.pipeline_stage.in_(["scored", "enriched"]),
                     Job.apply_url.isnot(None),
                 )
                 .order_by(Job.score.desc())
@@ -118,29 +118,24 @@ async def _stage_prepare_and_submit(
 
             application = Application(
                 job_id=job.id,
-                status="ready_for_review",
+                status="pending",  # Will be marked "ready_for_review" when moved to review stage
                 tailored_resume_id=resume_doc.id,
                 tailored_cover_letter_id=cl_doc.id,
             )
             db.add(application)
-            job.status = "applying"
+            
+            # Move job through pipeline stages
+            job.pipeline_stage = "prepared"
+            
             await db.commit()
             await db.refresh(application)
             run.applications_prepared += 1
 
-            if prefs.auto_submit_enabled:
-                # Rule: never auto-submit without a tailored resume attached.
-                if not application.tailored_resume_id:
-                    logger.warning(
-                        f"Application {application.id} missing tailored resume, not submitting"
-                    )
-                    continue
-                await _enqueue_auto_apply(application.id)
-                application.status = "pending"
-                await db.commit()
-                run.applications_submitted += 1
-            else:
-                run.applications_queued_for_review += 1
+            # Always require human review before submission
+            job.pipeline_stage = "review"
+            application.status = "ready_for_review"
+            await db.commit()
+            run.applications_queued_for_review += 1
 
         except TailoringError as e:
             logger.warning(f"Cannot tailor for job {job.id}: {e}")

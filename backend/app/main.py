@@ -19,6 +19,7 @@ from .routers import (
     auto_apply_scored,
     scraper,
     job_enrichment,
+    pipeline_visualizer,
 )
 from .services.job_sources import JobSourceManager
 from .services.job_sync_scheduler import (
@@ -136,6 +137,7 @@ app.include_router(dashboard.router, prefix="/api")  # Dashboard API
 app.include_router(auto_apply_scored.router, prefix="/api")  # Scoring integration
 app.include_router(scraper.router, prefix="/api")  # Actor-based scraper
 app.include_router(job_enrichment.router, prefix="/api")  # Job enrichment pipeline
+app.include_router(pipeline_visualizer.router, prefix="/api")  # Pipeline visualizer & review gate
 
 # WebSocket: /api/automation/ws/{session_id}
 

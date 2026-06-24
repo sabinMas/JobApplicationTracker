@@ -187,6 +187,7 @@ async def score_and_store(
     job.score_concerns = result["concerns"]
     job.score_recommendation = result["recommendation"]
     job.scored_at = datetime.utcnow()
+    job.pipeline_stage = "scored"  # Update pipeline stage after scoring
     await db.commit()
 
     logger.info(

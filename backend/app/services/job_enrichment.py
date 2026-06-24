@@ -23,10 +23,10 @@ async def enrich_high_scoring_jobs(db: AsyncSession, score_threshold: int = 7) -
 
     Returns the number of enrichment runs created.
     """
-    # Query jobs with high scores that are still in 'discovered' status
+    # Query jobs with high scores that are still in 'scored' or earlier stage
     stmt = (
         select(Job)
-        .where(Job.score >= score_threshold, Job.status == "discovered")
+        .where(Job.score >= score_threshold, Job.pipeline_stage.in_(["scored", "discovered"]))
         .limit(20)
     )  # Limit to prevent overwhelming SQS
 
@@ -43,6 +43,9 @@ async def enrich_high_scoring_jobs(db: AsyncSession, score_threshold: int = 7) -
                     f"No actor for source: {job.source}, skipping job {job.id}"
                 )
                 continue
+
+            # Mark job as enriching
+            job.pipeline_stage = "enriched"
 
             # Create enrichment run
             run_id = await enqueue_actor_run(

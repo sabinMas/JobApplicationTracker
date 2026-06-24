@@ -14,6 +14,10 @@ export interface SearchPreferences {
   min_score_to_apply?: number
   auto_submit_enabled?: boolean
   daily_application_limit?: number
+  // Discovery Limits
+  max_jobs_per_discovery_run?: number
+  max_jobs_to_score_per_run?: number
+  score_batch_size?: number
   created_at?: string
   updated_at?: string
 }

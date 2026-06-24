@@ -3,9 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Play, Loader2, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react'
 import { getPipelineRuns, runPipeline, PipelineRun } from '../api/pipeline'
 import { formatDistanceToNow } from 'date-fns'
+import { PipelineVisualizer } from '../components/PipelineVisualizer'
+import { JobReviewGate } from '../components/JobReviewGate'
 
 export function PipelinePage() {
   const qc = useQueryClient()
+  const [activeTab, setActiveTab] = useState<'visualizer' | 'review' | 'history'>('review')
+
   const { data: runs, isLoading } = useQuery({
     queryKey: ['pipeline-runs'],
     queryFn: () => getPipelineRuns(20),
@@ -18,13 +22,13 @@ export function PipelinePage() {
   })
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       {/* Header & Explanation */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Automation Pipeline</h1>
           <p className="text-gray-600 text-sm mt-1">
-            Complete workflow: discover jobs → score matches → enrich details → prepare applications → submit
+            Complete workflow: discover → score → enrich → prepare → review → submit
           </p>
         </div>
         <button
@@ -41,34 +45,79 @@ export function PipelinePage() {
       <div className="card p-5 bg-blue-50 border-blue-300">
         <p className="text-sm text-blue-900">
           <strong>What happens:</strong> AI discovers jobs matching your preferences, scores them 1-10,
-          enriches details with AI analysis, prepares tailored documents, and auto-submits high-scoring applications.
-          Monitor progress below.
+          enriches details with AI analysis, prepares tailored documents, and requires your approval before submitting.
+          Monitor progress and review jobs below.
         </p>
       </div>
 
-      {/* Latest Run Summary */}
-      {runs && runs.length > 0 && <LatestRunCard run={runs[0]} />}
-
-      {/* Run History */}
-      <div className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-parchment-300">
-          <h3 className="font-semibold text-gray-800 text-sm">Run History</h3>
+      {/* Tabs */}
+      <div className="card">
+        <div className="flex border-b border-parchment-300">
+          <button
+            className={`flex-1 px-4 py-3 text-center font-medium text-sm transition ${
+              activeTab === 'review'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+            onClick={() => setActiveTab('review')}
+          >
+            Review Gate ({runs?.[0]?.applications_queued_for_review || 0})
+          </button>
+          <button
+            className={`flex-1 px-4 py-3 text-center font-medium text-sm transition ${
+              activeTab === 'visualizer'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+            onClick={() => setActiveTab('visualizer')}
+          >
+            Pipeline Visualizer
+          </button>
+          <button
+            className={`flex-1 px-4 py-3 text-center font-medium text-sm transition ${
+              activeTab === 'history'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+            onClick={() => setActiveTab('history')}
+          >
+            Run History
+          </button>
         </div>
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12 text-gray-400">
-            <Loader2 size={20} className="animate-spin" />
-          </div>
-        ) : !runs || runs.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 text-sm">
-            No pipeline runs yet. Click "Run Now" to start the first one.
-          </div>
-        ) : (
-          <div className="divide-y divide-parchment-200">
-            {runs.map((run) => (
-              <RunRow key={run.id} run={run} />
-            ))}
-          </div>
-        )}
+
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'review' && <JobReviewGate />}
+          {activeTab === 'visualizer' && <PipelineVisualizer />}
+          {activeTab === 'history' && (
+            <>
+              {/* Latest Run Summary */}
+              {runs && runs.length > 0 && <LatestRunCard run={runs[0]} />}
+
+              {/* Run History */}
+              <div className="card overflow-hidden mt-6">
+                <div className="px-5 py-3 border-b border-parchment-300">
+                  <h3 className="font-semibold text-gray-800 text-sm">Run History</h3>
+                </div>
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-12 text-gray-400">
+                    <Loader2 size={20} className="animate-spin" />
+                  </div>
+                ) : !runs || runs.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500 text-sm">
+                    No pipeline runs yet. Click "Run Now" to start the first one.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-parchment-200">
+                    {runs.map((run) => (
+                      <RunRow key={run.id} run={run} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

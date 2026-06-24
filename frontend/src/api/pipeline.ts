@@ -15,8 +15,65 @@ export interface PipelineRun {
   errors?: { stage: string; message: string; timestamp: string }[]
 }
 
+export interface PipelineJobOut {
+  id: number
+  title: string
+  company: string
+  location?: string
+  source: string
+  apply_url?: string
+  score?: number
+  score_reasoning?: string
+  score_strengths?: string[]
+  score_concerns?: string[]
+  pipeline_stage: string
+  enrichment_data?: string
+  pipeline_data?: Record<string, any>
+  created_at?: string
+}
+
+export interface PipelineVisualizerOut {
+  total_jobs: number
+  by_stage: Record<string, number>
+  jobs_by_stage: Record<string, PipelineJobOut[]>
+  timestamp: string
+}
+
 export const runPipeline = () =>
   api.post<PipelineRun>('/scheduler/run-pipeline').then(r => r.data)
 
 export const getPipelineRuns = (limit = 10) =>
   api.get<PipelineRun[]>('/scheduler/pipeline-runs', { params: { limit } }).then(r => r.data)
+
+// Pipeline Visualizer API
+export const getPipelineJobs = (stage?: string) =>
+  api
+    .get<PipelineVisualizerOut>('/pipeline-visualizer/jobs', {
+      params: { ...(stage && { stage }) },
+    })
+    .then(r => r.data)
+
+export const getJobsForReview = (skip: number = 0, limit: number = 10) =>
+  api
+    .get<PipelineJobOut[]>('/pipeline-visualizer/jobs-for-review', {
+      params: { skip, limit },
+    })
+    .then(r => r.data)
+
+export const reviewJob = (
+  jobId: number,
+  action: 'approve' | 'reject' | 'edit',
+  editedCoverLetter?: string
+) =>
+  api
+    .post('/pipeline-visualizer/review-job', {
+      job_id: jobId,
+      action,
+      edited_cover_letter: editedCoverLetter,
+    })
+    .then(r => r.data)
+
+export const getPipelineStats = () =>
+  api
+    .get('/pipeline-visualizer/stats')
+    .then(r => r.data)

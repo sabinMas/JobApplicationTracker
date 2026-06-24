@@ -255,6 +255,79 @@ export function PreferencesPage() {
         </div>
       </div>
 
+      {/* Discovery Limits - Prevent Timeouts */}
+      <div className="card p-5 space-y-4 bg-amber-50 border border-amber-200">
+        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+          <span>⚙️ Discovery Limits</span>
+          <span className="text-xs font-normal bg-amber-200 text-amber-800 px-2 py-1 rounded">
+            Prevents timeouts
+          </span>
+        </h3>
+        <p className="text-sm text-gray-600 mb-3">
+          Control how many jobs are discovered and processed per run to avoid timeouts and manage your workload.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Max Jobs Per Discovery</label>
+            <input
+              type="number"
+              className="input"
+              min={5}
+              max={100}
+              placeholder="25"
+              value={form.max_jobs_per_discovery_run ?? ''}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  max_jobs_per_discovery_run: e.target.value ? parseInt(e.target.value) : undefined,
+                }))
+              }
+            />
+            <p className="text-xs text-gray-500 mt-1">Stop discovering after this many jobs found</p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Max Jobs to Score</label>
+            <input
+              type="number"
+              className="input"
+              min={5}
+              max={100}
+              placeholder="25"
+              value={form.max_jobs_to_score_per_run ?? ''}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  max_jobs_to_score_per_run: e.target.value ? parseInt(e.target.value) : undefined,
+                }))
+              }
+            />
+            <p className="text-xs text-gray-500 mt-1">Max scoring batch size per run</p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Scoring Batch Size</label>
+            <input
+              type="number"
+              className="input"
+              min={1}
+              max={10}
+              placeholder="5"
+              value={form.score_batch_size ?? ''}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  score_batch_size: e.target.value ? parseInt(e.target.value) : undefined,
+                }))
+              }
+            />
+            <p className="text-xs text-gray-500 mt-1">Concurrent scoring limit</p>
+          </div>
+        </div>
+        <p className="text-xs text-amber-800 bg-amber-100 p-2 rounded mt-3">
+          💡 <strong>Pro Tip:</strong> Lower limits = slower but more stable. Start with 25 jobs per discovery
+          and 5 concurrent scoring to avoid timeouts.
+        </p>
+      </div>
+
       {/* Guidance footer */}
       <div className="border-t border-parchment-300 pt-6 mt-8">
         <p className="text-sm text-gray-600 mb-3">✓ Preferences saved. Ready to find jobs?</p>

@@ -46,6 +46,10 @@ class SearchPreferencesUpdate(BaseModel):
     min_score_to_apply: Optional[int] = None
     auto_submit_enabled: Optional[bool] = None
     daily_application_limit: Optional[int] = None
+    # Discovery Limits
+    max_jobs_per_discovery_run: Optional[int] = None
+    max_jobs_to_score_per_run: Optional[int] = None
+    score_batch_size: Optional[int] = None
 
 
 class SearchPreferencesOut(SearchPreferencesUpdate):
@@ -356,4 +360,53 @@ class HealthCheckOut(BaseModel):
     status: str
     service: str
     db_initialized: bool
+    timestamp: datetime
+
+
+# ─── Pipeline Job Visualizer & Review Gate ───────────────────────────────────
+
+
+class PipelineJobOut(BaseModel):
+    """Job with pipeline stage and review information"""
+
+    id: int
+    title: str
+    company: str
+    location: Optional[str] = None
+    source: str
+    apply_url: Optional[str] = None
+    score: Optional[int] = None
+    score_reasoning: Optional[str] = None
+    score_strengths: Optional[List[str]] = None
+    score_concerns: Optional[List[str]] = None
+    pipeline_stage: str  # discovered/scored/enriched/prepared/review/submitted/skipped
+    enrichment_data: Optional[str] = None
+    pipeline_data: Optional[dict] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class PipelineStageUpdate(BaseModel):
+    """Update job pipeline stage"""
+
+    pipeline_stage: str
+    pipeline_data: Optional[dict] = None
+
+
+class JobReviewRequest(BaseModel):
+    """Review before submission - includes job, resume, cover letter"""
+
+    job_id: int
+    action: str  # "approve", "reject", "edit"
+    edited_cover_letter: Optional[str] = None
+
+
+class PipelineVisualizerOut(BaseModel):
+    """Pipeline visualization with job counts by stage"""
+
+    total_jobs: int
+    by_stage: dict  # {stage: count, ...}
+    jobs_by_stage: dict  # {stage: [PipelineJobOut, ...]}
     timestamp: datetime
