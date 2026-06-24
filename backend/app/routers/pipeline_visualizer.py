@@ -12,12 +12,12 @@ Provides endpoints for:
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 from datetime import datetime
 import logging
 
 from ..database import get_db
-from ..models import Job, Application, Profile, Document
+from ..models import Job, Application, Document
 from ..schemas import (
     PipelineJobOut,
     PipelineStageUpdate,
