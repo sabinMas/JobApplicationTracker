@@ -48,12 +48,12 @@ async def get_pipeline_jobs(
 ) -> PipelineVisualizerOut:
     """
     Get comprehensive pipeline visualization with job counts by stage.
-    
+
     Args:
         stage: Optional filter for specific stage
         limit_per_stage: Max jobs to return per stage
         db: Database session
-    
+
     Returns:
         PipelineVisualizerOut with job counts and jobs organized by stage
     """
@@ -105,7 +105,9 @@ async def get_pipeline_jobs(
         return PipelineVisualizerOut(
             total_jobs=total_jobs,
             by_stage=by_stage,
-            jobs_by_stage=jobs_by_stage if stage is None else {stage: jobs_by_stage.get(stage, [])},
+            jobs_by_stage=jobs_by_stage
+            if stage is None
+            else {stage: jobs_by_stage.get(stage, [])},
             timestamp=datetime.utcnow(),
         )
 
@@ -122,12 +124,12 @@ async def get_jobs_for_review(
 ) -> list[PipelineJobOut]:
     """
     Get all jobs in "review" stage awaiting human approval before submission.
-    
+
     Args:
         skip: Pagination offset
         limit: Number of jobs to return
         db: Database session
-    
+
     Returns:
         List of jobs awaiting review
     """
@@ -173,21 +175,23 @@ async def review_job(
 ) -> dict:
     """
     Handle user review action on a job before submission.
-    
+
     Actions:
     - "approve": Move to prepared stage, create application, and submit
     - "reject": Move to skipped stage
     - "edit": Update cover letter and move to prepared stage
-    
+
     Args:
         request: Review action with job_id and action
         db: Database session
-    
+
     Returns:
         Status of the review action
     """
     try:
-        job = await db.execute(select(Job).where(Job.id == request.job_id)).scalar_one_or_none()
+        job = await db.execute(
+            select(Job).where(Job.id == request.job_id)
+        ).scalar_one_or_none()
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
@@ -195,7 +199,11 @@ async def review_job(
             job.pipeline_stage = "submitted"
             await db.commit()
             logger.info(f"Job {job.id} approved for submission")
-            return {"status": "approved", "job_id": job.id, "message": "Job moved to submission queue"}
+            return {
+                "status": "approved",
+                "job_id": job.id,
+                "message": "Job moved to submission queue",
+            }
 
         elif request.action == "reject":
             job.pipeline_stage = "skipped"
@@ -222,12 +230,16 @@ async def review_job(
             }
 
         else:
-            raise HTTPException(status_code=400, detail=f"Invalid action: {request.action}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid action: {request.action}"
+            )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error reviewing job", extra={"error": str(e), "job_id": request.job_id})
+        logger.error(
+            "Error reviewing job", extra={"error": str(e), "job_id": request.job_id}
+        )
         raise HTTPException(status_code=500, detail="Failed to process review")
 
 
@@ -239,12 +251,12 @@ async def update_job_stage(
 ) -> dict:
     """
     Update a job's pipeline stage (for internal use by automation service).
-    
+
     Args:
         job_id: ID of the job to update
         update: New stage and optional pipeline data
         db: Database session
-    
+
     Returns:
         Confirmation of stage update
     """
@@ -254,7 +266,10 @@ async def update_job_stage(
             raise HTTPException(status_code=404, detail="Job not found")
 
         if update.pipeline_stage not in PIPELINE_STAGES:
-            raise HTTPException(status_code=400, detail=f"Invalid pipeline stage: {update.pipeline_stage}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid pipeline stage: {update.pipeline_stage}",
+            )
 
         old_stage = job.pipeline_stage
         job.pipeline_stage = update.pipeline_stage
@@ -278,7 +293,9 @@ async def update_job_stage(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error updating job stage", extra={"error": str(e), "job_id": job_id})
+        logger.error(
+            "Error updating job stage", extra={"error": str(e), "job_id": job_id}
+        )
         raise HTTPException(status_code=500, detail="Failed to update job stage")
 
 
@@ -286,10 +303,10 @@ async def update_job_stage(
 async def get_pipeline_stats(db: AsyncSession = Depends(get_db)) -> dict:
     """
     Get comprehensive pipeline statistics.
-    
+
     Args:
         db: Database session
-    
+
     Returns:
         Pipeline stats with bottleneck analysis
     """
@@ -330,13 +347,13 @@ async def get_full_application_review(
 ) -> dict:
     """
     Get complete application data for human review.
-    
+
     Returns job details, tailored resume, and tailored cover letter.
-    
+
     Args:
         application_id: ID of the application to review
         db: Database session
-    
+
     Returns:
         Full application with job details, resume, and cover letter content
     """
@@ -346,16 +363,14 @@ async def get_full_application_review(
             select(Application).where(Application.id == application_id)
         )
         app = app_result.scalar_one_or_none()
-        
+
         if not app:
             raise HTTPException(status_code=404, detail="Application not found")
 
         # Get the job
-        job_result = await db.execute(
-            select(Job).where(Job.id == app.job_id)
-        )
+        job_result = await db.execute(select(Job).where(Job.id == app.job_id))
         job = job_result.scalar_one_or_none()
-        
+
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
@@ -420,7 +435,9 @@ async def get_full_application_review(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching application for review: {e}", extra={"error": str(e)})
+        logger.error(
+            f"Error fetching application for review: {e}", extra={"error": str(e)}
+        )
         raise HTTPException(status_code=500, detail="Failed to fetch application")
 
 
@@ -431,34 +448,32 @@ async def approve_and_submit_application(
 ) -> dict:
     """
     Approve an application and submit it to the job.
-    
+
     Moves job to 'submitted' stage and triggers auto-apply.
-    
+
     Args:
         application_id: ID of application to approve and submit
         db: Database session
-    
+
     Returns:
         Submission status and result
     """
     try:
         from ..services import auto_apply_service
-        
+
         # Get the application
         app_result = await db.execute(
             select(Application).where(Application.id == application_id)
         )
         app = app_result.scalar_one_or_none()
-        
+
         if not app:
             raise HTTPException(status_code=404, detail="Application not found")
 
         # Get the job
-        job_result = await db.execute(
-            select(Job).where(Job.id == app.job_id)
-        )
+        job_result = await db.execute(select(Job).where(Job.id == app.job_id))
         job = job_result.scalar_one_or_none()
-        
+
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
@@ -468,12 +483,12 @@ async def approve_and_submit_application(
         try:
             # Perform auto-apply submission
             result = await auto_apply_service.run_full_auto_apply(db, application_id)
-            
+
             if result.get("status") == "success":
                 app.status = "applied"
                 app.applied_date = datetime.utcnow()
                 await db.commit()
-                
+
                 logger.info(
                     f"Application {application_id} approved and submitted successfully",
                     extra={"job_id": job.id, "result": result.get("message")},
@@ -490,7 +505,7 @@ async def approve_and_submit_application(
                 app.status = "applied"
                 app.last_error = result.get("message")
                 await db.commit()
-                
+
                 logger.warning(
                     f"Application {application_id} submission encountered issues",
                     extra={"job_id": job.id, "error": result.get("message")},
@@ -506,7 +521,7 @@ async def approve_and_submit_application(
         except Exception as e:
             app.last_error = str(e)
             await db.commit()
-            
+
             logger.error(
                 f"Error submitting application {application_id}: {e}",
                 extra={"job_id": job.id, "error": str(e)},
@@ -533,14 +548,14 @@ async def reject_application(
 ) -> dict:
     """
     Reject an application and mark it as skipped.
-    
+
     Moves job to 'skipped' stage.
-    
+
     Args:
         application_id: ID of application to reject
         rejection_reason: Optional reason for rejection
         db: Database session
-    
+
     Returns:
         Rejection confirmation
     """
@@ -550,16 +565,14 @@ async def reject_application(
             select(Application).where(Application.id == application_id)
         )
         app = app_result.scalar_one_or_none()
-        
+
         if not app:
             raise HTTPException(status_code=404, detail="Application not found")
 
         # Get the job
-        job_result = await db.execute(
-            select(Job).where(Job.id == app.job_id)
-        )
+        job_result = await db.execute(select(Job).where(Job.id == app.job_id))
         job = job_result.scalar_one_or_none()
-        
+
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 

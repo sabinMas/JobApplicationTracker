@@ -26,7 +26,10 @@ async def enrich_high_scoring_jobs(db: AsyncSession, score_threshold: int = 7) -
     # Query jobs with high scores that are still in 'scored' or earlier stage
     stmt = (
         select(Job)
-        .where(Job.score >= score_threshold, Job.pipeline_stage.in_(["scored", "discovered"]))
+        .where(
+            Job.score >= score_threshold,
+            Job.pipeline_stage.in_(["scored", "discovered"]),
+        )
         .limit(20)
     )  # Limit to prevent overwhelming SQS
 

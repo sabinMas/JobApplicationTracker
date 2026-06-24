@@ -128,6 +128,7 @@ class JobSourceManager:
         max_discovery_limit = 50  # Default
         try:
             from ...models import SearchPreferences
+
             async with AsyncSessionLocal() as session:
                 prefs = (
                     await session.execute(select(SearchPreferences))
@@ -141,9 +142,10 @@ class JobSourceManager:
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(Job.apply_url))
             existing_urls = {row[0] for row in result.fetchall()}
-            
+
             # Also load DiscoveredJobURL for deduplication
             from ...models import DiscoveredJobURL
+
             result = await session.execute(select(DiscoveredJobURL.job_url))
             discovered_urls = {row[0] for row in result.fetchall()}
 
@@ -171,7 +173,10 @@ class JobSourceManager:
                         continue
 
                     # Check for existing jobs in database or discovered URLs
-                    if job_listing.apply_url in existing_urls or job_listing.apply_url in discovered_urls:
+                    if (
+                        job_listing.apply_url in existing_urls
+                        or job_listing.apply_url in discovered_urls
+                    ):
                         stats["duplicates"] += 1
                         logger.debug(
                             f"Job already exists: {job_listing.title}",
@@ -194,6 +199,7 @@ class JobSourceManager:
 
                     # Track in DiscoveredJobURL for future deduplication
                     from ...models import DiscoveredJobURL
+
                     discovered_url = DiscoveredJobURL(
                         job_url=job_listing.apply_url,
                         source=source_name,

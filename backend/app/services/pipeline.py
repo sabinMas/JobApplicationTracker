@@ -123,10 +123,10 @@ async def _stage_prepare_and_submit(
                 tailored_cover_letter_id=cl_doc.id,
             )
             db.add(application)
-            
+
             # Move job through pipeline stages
             job.pipeline_stage = "prepared"
-            
+
             await db.commit()
             await db.refresh(application)
             run.applications_prepared += 1

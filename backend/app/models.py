@@ -57,7 +57,9 @@ class SearchPreferences(Base):
     min_score_to_apply = Column(Integer, default=8)  # 1-10
     auto_submit_enabled = Column(Boolean, default=False)  # False = queue for review
     daily_application_limit = Column(Integer, default=10)
-    max_jobs_per_discovery_run = Column(Integer, default=50)  # Prevent discovery flooding
+    max_jobs_per_discovery_run = Column(
+        Integer, default=50
+    )  # Prevent discovery flooding
     skip_previously_discovered = Column(Boolean, default=True)  # Skip duplicate URLs
 
 
@@ -67,16 +69,22 @@ class DiscoveredJobURL(Base):
     __tablename__ = "discovered_job_urls"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    job_url = Column(String(1000), nullable=False, unique=True)  # URL hash for deduplication
+    job_url = Column(
+        String(1000), nullable=False, unique=True
+    )  # URL hash for deduplication
     source = Column(String(50))  # linkedin, indeed, etc.
     discovered_at = Column(DateTime(timezone=True), server_default=func.now())
-    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True)  # Reference to Job if created
-    
+    job_id = Column(
+        Integer, ForeignKey("jobs.id"), nullable=True
+    )  # Reference to Job if created
+
     # Discovery Limits (to prevent timeouts and manage workload)
-    max_jobs_per_discovery_run = Column(Integer, default=25)  # Stop discovery after N jobs found
+    max_jobs_per_discovery_run = Column(
+        Integer, default=25
+    )  # Stop discovery after N jobs found
     max_jobs_to_score_per_run = Column(Integer, default=25)  # Max scoring batch size
     score_batch_size = Column(Integer, default=5)  # Concurrent scoring limit
-    
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -135,10 +143,11 @@ class Job(Base):
 
     # Pipeline Stage Tracking
     pipeline_stage = Column(
-        String(50), 
-        default="discovered"
+        String(50), default="discovered"
     )  # discovered/scored/enriched/prepared/review/submitted/skipped
-    pipeline_data = Column(JSON, default=dict)  # {generated_cover_letter, enrichment_notes, etc}
+    pipeline_data = Column(
+        JSON, default=dict
+    )  # {generated_cover_letter, enrichment_notes, etc}
     enriched_at = Column(DateTime(timezone=True), nullable=True)
     enrichment_data = Column(Text, nullable=True)  # AI enrichment analysis
 
