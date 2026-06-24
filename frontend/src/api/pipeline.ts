@@ -39,6 +39,26 @@ export interface PipelineVisualizerOut {
   timestamp: string
 }
 
+export interface ApplicationReviewData {
+  application_id: number
+  application_status: string
+  job: PipelineJobOut & {
+    description?: string
+    requirements?: string
+    salary_range?: string
+    posted_date?: string
+  }
+  tailored_resume: {
+    content?: string
+    path?: string
+  }
+  tailored_cover_letter: {
+    content?: string
+    path?: string
+  }
+  created_at?: string
+}
+
 export const runPipeline = () =>
   api.post<PipelineRun>('/scheduler/run-pipeline').then(r => r.data)
 
@@ -51,6 +71,11 @@ export const getPipelineJobs = (stage?: string) =>
     .get<PipelineVisualizerOut>('/pipeline-visualizer/jobs', {
       params: { ...(stage && { stage }) },
     })
+    .then(r => r.data)
+
+export const getPipelineStats = () =>
+  api
+    .get('/pipeline-visualizer/stats')
     .then(r => r.data)
 
 export const getJobsForReview = (skip: number = 0, limit: number = 10) =>
@@ -73,7 +98,27 @@ export const reviewJob = (
     })
     .then(r => r.data)
 
-export const getPipelineStats = () =>
+// New endpoints for full application review
+export const getApplicationForReview = (applicationId: number) =>
   api
-    .get('/pipeline-visualizer/stats')
+    .get<ApplicationReviewData>(`/pipeline-visualizer/application/${applicationId}/full-review`)
+    .then(r => r.data)
+
+export const approveAndSubmitApplication = (applicationId: number) =>
+  api
+    .post(`/pipeline-visualizer/application/${applicationId}/approve-and-submit`, {})
+    .then(r => r.data)
+
+export const rejectApplication = (applicationId: number, rejectionReason?: string) =>
+  api
+    .post(`/pipeline-visualizer/application/${applicationId}/reject`, {}, {
+      params: { ...(rejectionReason && { rejection_reason: rejectionReason }) },
+    })
+    .then(r => r.data)
+
+export const getApplicationsInReview = (limit: number = 20, offset: number = 0) =>
+  api
+    .get('/pipeline-visualizer/applications-in-review', {
+      params: { limit, offset },
+    })
     .then(r => r.data)

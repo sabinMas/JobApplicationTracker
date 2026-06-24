@@ -11,6 +11,7 @@ import {
   Star,
 } from 'lucide-react'
 import { getPipelineJobs, PipelineJobOut } from '../api/pipeline'
+import { ApplicationDetailView } from './ApplicationDetailView'
 import { formatDistanceToNow } from 'date-fns'
 
 const PIPELINE_STAGES = [
@@ -29,6 +30,7 @@ interface PipelineVisualizerProps {
 export function PipelineVisualizer({ refetchInterval = 5000 }: PipelineVisualizerProps) {
   const [expandedStage, setExpandedStage] = useState<string>('review') // Focus on review stage by default
   const [selectedJob, setSelectedJob] = useState<PipelineJobOut | null>(null)
+  const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['pipeline-jobs'],
@@ -117,8 +119,10 @@ export function PipelineVisualizer({ refetchInterval = 5000 }: PipelineVisualize
                       <JobCard
                         key={job.id}
                         job={job}
+                        stage={stage.id}
                         isSelected={selectedJob?.id === job.id}
                         onSelect={() => setSelectedJob(selectedJob?.id === job.id ? null : job)}
+                        onApplicationClick={stage.id === 'review' ? (jobId) => setSelectedApplicationId(jobId) : undefined}
                       />
                     ))}
                   </div>
@@ -140,6 +144,11 @@ export function PipelineVisualizer({ refetchInterval = 5000 }: PipelineVisualize
       {selectedJob && (
         <JobDetailPanel job={selectedJob} onClose={() => setSelectedJob(null)} />
       )}
+
+      {/* Application Detail Modal */}
+      {selectedApplicationId !== null && (
+        <ApplicationDetailView applicationId={selectedApplicationId} onClose={() => setSelectedApplicationId(null)} />
+      )}
     </div>
   )
 }
@@ -148,15 +157,25 @@ interface JobCardProps {
   job: PipelineJobOut
   isSelected: boolean
   onSelect: () => void
+  stage: string
+  onApplicationClick?: (jobId: number) => void
 }
 
-function JobCard({ job, isSelected, onSelect }: JobCardProps) {
+function JobCard({ job, isSelected, onSelect, stage, onApplicationClick }: JobCardProps) {
+  const isReviewStage = stage === 'review'
+
   return (
     <div
       className={`px-5 py-3 hover:bg-gray-50 cursor-pointer transition border-l-4 ${
         isSelected ? 'border-l-blue-500 bg-blue-50' : 'border-l-transparent'
       }`}
-      onClick={onSelect}
+      onClick={() => {
+        if (isReviewStage && onApplicationClick) {
+          onApplicationClick(job.id)
+        } else {
+          onSelect()
+        }
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -177,6 +196,9 @@ function JobCard({ job, isSelected, onSelect }: JobCardProps) {
             <p className="text-xs text-gray-500">
               {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
             </p>
+          )}
+          {isReviewStage && (
+            <p className="text-[10px] text-blue-600 font-semibold mt-1">→ Review</p>
           )}
         </div>
       </div>
