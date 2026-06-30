@@ -1,0 +1,21 @@
+name: Add SSH Key to EC2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  add-key:
+    name: Add Claude-code-key to EC2 authorized_keys
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add public key via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            echo "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDDrKQajtBwDBksWQHNnDnXUYpQmwkx8Wq5XozlachiUsrwAbOAy2gXDhnoI8vc8pVW+gKoQpUpyahromZgzre1g/tjh6M9KjaT+SHjJWV6nrLo3dMn05TmLmD0/LvsI++CbJ/dnPM/ozLG6FWRwUAkhfNz3p4wuqhfcJBBLULBo9EWkB30MTAdnr6nXYFAbBgmSVNmJGJxcoiSRuK0wN8W1/HQFermEyctxePmSyKnaw0T/LU/i1v2JymD4jQKe4PL1gcUbq+2mZP457+wy2+Zqx3JHi5czt6fgxw+v5ATE96B35OljylKBVUmp1CAm5uzNex2ueTWLWRUcIBbVKQR Claude-code-key" >> ~/.ssh/authorized_keys
+            echo "Key added successfully"
+            tail -1 ~/.ssh/authorized_keys
