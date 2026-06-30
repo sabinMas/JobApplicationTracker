@@ -9,7 +9,7 @@ Jobs management endpoints.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, asc, func, nullslast
+from sqlalchemy import select, desc, func, nullslast
 from datetime import datetime, timezone
 from typing import Optional
 
