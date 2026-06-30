@@ -149,107 +149,83 @@ class JobSourceManager:
             result = await session.execute(select(DiscoveredJobURL.job_url))
             discovered_urls = {row[0] for row in result.fetchall()}
 
-        # Deduplicate and insert
+        # Deduplicate and insert — each job in its own transaction to prevent
+        # a single failure from aborting the entire batch (PostgreSQL behaviour).
         seen_urls: Set[str] = set()
 
-        async with AsyncSessionLocal() as session:
-            for source_name, job_listing in all_jobs:
-                try:
-                    # Respect discovery limit
-                    if stats["added"] >= max_discovery_limit:
-                        stats["limited"] += 1
-                        logger.debug(
-                            f"Discovery limit reached ({max_discovery_limit}), skipping job",
-                            extra_fields={
-                                "source": source_name,
-                                "job_title": job_listing.title,
-                            },
-                        )
-                        continue
+        for source_name, job_listing in all_jobs:
+            # Respect discovery limit
+            if stats["added"] >= max_discovery_limit:
+                stats["limited"] += 1
+                continue
 
-                    # Check for duplicates within this sync
-                    if job_listing.apply_url in seen_urls:
-                        stats["duplicates"] += 1
-                        continue
+            # Check for duplicates within this sync
+            if job_listing.apply_url in seen_urls:
+                stats["duplicates"] += 1
+                continue
 
-                    # Check for existing jobs in database or discovered URLs
-                    if (
-                        job_listing.apply_url in existing_urls
-                        or job_listing.apply_url in discovered_urls
-                    ):
-                        stats["duplicates"] += 1
-                        logger.debug(
-                            f"Job already exists: {job_listing.title}",
-                            extra_fields={
-                                "source": source_name,
-                                "url": job_listing.apply_url,
-                            },
-                        )
-                        continue
+            # Check for existing jobs in database or discovered URLs
+            if (
+                job_listing.apply_url in existing_urls
+                or job_listing.apply_url in discovered_urls
+            ):
+                stats["duplicates"] += 1
+                logger.debug(
+                    f"Job already exists: {job_listing.title}",
+                    extra_fields={"source": source_name, "url": job_listing.apply_url},
+                )
+                continue
 
-                    seen_urls.add(job_listing.apply_url)
+            seen_urls.add(job_listing.apply_url)
 
-                    # Create new job record
+            try:
+                async with AsyncSessionLocal() as session:
                     job_dict = job_listing.to_dict()
                     job_dict["source"] = source_name
 
                     job = Job(**job_dict)
                     session.add(job)
-                    await session.flush()  # Get the job ID
+                    await session.flush()
 
-                    # Track in DiscoveredJobURL for future deduplication
                     from ...models import DiscoveredJobURL
 
-                    discovered_url = DiscoveredJobURL(
-                        job_url=job_listing.apply_url,
-                        source=source_name,
-                        job_id=job.id,
+                    session.add(
+                        DiscoveredJobURL(
+                            job_url=job_listing.apply_url,
+                            source=source_name,
+                            job_id=job.id,
+                        )
                     )
-                    session.add(discovered_url)
+                    await session.commit()
 
-                    stats["added"] += 1
-
-                    logger.debug(
-                        f"Added job: {job_listing.title}",
-                        extra_fields={
-                            "source": source_name,
-                            "company": job_listing.company,
-                        },
-                    )
-
-                except Exception as e:
-                    stats["errors"] += 1
-                    logger.error(
-                        f"Error adding job: {e}",
-                        extra_fields={
-                            "source": source_name,
-                            "job_title": job_listing.title,
-                            "error": str(e),
-                        },
-                    )
-                    continue
-
-            # Commit all changes
-            try:
-                await session.commit()
-                logger.info(
-                    "Synced jobs to database",
-                    extra_fields={
-                        "added": stats["added"],
-                        "duplicates": stats["duplicates"],
-                        "errors": stats["errors"],
-                        "limited": stats["limited"],
-                    },
+                stats["added"] += 1
+                # Update in-memory sets so later iterations see the new URL
+                existing_urls.add(job_listing.apply_url)
+                logger.debug(
+                    f"Added job: {job_listing.title}",
+                    extra_fields={"source": source_name, "company": job_listing.company},
                 )
+
             except Exception as e:
+                stats["errors"] += 1
                 logger.error(
-                    f"Failed to commit jobs: {e}",
+                    f"Error adding job '{job_listing.title}': {e}",
                     extra_fields={
+                        "source": source_name,
+                        "job_title": job_listing.title,
                         "error": str(e),
                     },
                 )
-                stats["errors"] += stats["added"]
-                stats["added"] = 0
+
+        logger.info(
+            "Synced jobs to database",
+            extra_fields={
+                "added": stats["added"],
+                "duplicates": stats["duplicates"],
+                "errors": stats["errors"],
+                "limited": stats["limited"],
+            },
+        )
 
         return stats
 

@@ -189,9 +189,8 @@ async def review_job(
         Status of the review action
     """
     try:
-        job = await db.execute(
-            select(Job).where(Job.id == request.job_id)
-        ).scalar_one_or_none()
+        result = await db.execute(select(Job).where(Job.id == request.job_id))
+        job = result.scalar_one_or_none()
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
@@ -261,7 +260,8 @@ async def update_job_stage(
         Confirmation of stage update
     """
     try:
-        job = await db.execute(select(Job).where(Job.id == job_id)).scalar_one_or_none()
+        _result = await db.execute(select(Job).where(Job.id == job_id))
+        job = _result.scalar_one_or_none()
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 

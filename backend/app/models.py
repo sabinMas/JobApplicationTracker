@@ -69,24 +69,10 @@ class DiscoveredJobURL(Base):
     __tablename__ = "discovered_job_urls"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    job_url = Column(
-        String(1000), nullable=False, unique=True
-    )  # URL hash for deduplication
-    source = Column(String(50))  # linkedin, indeed, etc.
+    job_url = Column(String(1000), nullable=False, unique=True)
+    source = Column(String(50))
     discovered_at = Column(DateTime(timezone=True), server_default=func.now())
-    job_id = Column(
-        Integer, ForeignKey("jobs.id"), nullable=True
-    )  # Reference to Job if created
-
-    # Discovery Limits (to prevent timeouts and manage workload)
-    max_jobs_per_discovery_run = Column(
-        Integer, default=25
-    )  # Stop discovery after N jobs found
-    max_jobs_to_score_per_run = Column(Integer, default=25)  # Max scoring batch size
-    score_batch_size = Column(Integer, default=5)  # Concurrent scoring limit
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True)
 
 
 class PipelineRun(Base):

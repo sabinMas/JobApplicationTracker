@@ -54,6 +54,16 @@ async def _stage_discover(run: PipelineRun) -> None:
 
 
 async def _stage_score(db: AsyncSession, run: PipelineRun) -> None:
+    # Sync pipeline_stage for jobs that have a score but are still marked "discovered"
+    # (happens when scoring was done before pipeline_stage tracking was introduced)
+    from sqlalchemy import update as sa_update
+    await db.execute(
+        sa_update(Job)
+        .where(Job.score.isnot(None), Job.pipeline_stage == "discovered")
+        .values(pipeline_stage="scored")
+    )
+    await db.commit()
+
     jobs = (
         (
             await db.execute(
