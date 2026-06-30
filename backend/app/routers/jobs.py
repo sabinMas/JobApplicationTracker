@@ -10,19 +10,16 @@ Jobs management endpoints.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, func, nullslast
-from datetime import datetime, timezone
 from typing import Optional
 
 from ..database import get_db
 from ..models import Job
-from ..services.job_sources import JobSourceManager, RSSJobSource
+from ..services.job_sources import RSSJobSource
+from ..services.job_sync_scheduler import get_scheduler
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/jobs", tags=["jobs"])
-
-# Global job source manager
-job_manager = JobSourceManager()
 
 
 @router.get("", include_in_schema=False)
@@ -104,31 +101,27 @@ async def list_jobs(
 
 
 @router.post("/sync")
-async def sync_jobs(
-    db: AsyncSession = Depends(get_db),
-):
+async def sync_jobs():
     """
     Sync jobs from all configured sources.
 
     This endpoint:
     1. Fetches jobs from all registered sources in parallel
     2. Deduplicates against existing jobs
-    3. Stores new jobs in database
+    3. Applies profile-based relevance filter before storing
 
-    Returns sync statistics (added, duplicates, errors)
+    Returns sync statistics (added, duplicates, irrelevant, errors)
     """
     logger.info("Starting job sync")
 
+    scheduler = get_scheduler()
+    if not scheduler:
+        raise HTTPException(503, "Job sync scheduler not initialized")
+
     try:
-        stats = await job_manager.sync()
-
-        logger.info("Job sync completed", extra_fields=stats)
-
-        return {
-            "status": "success",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "stats": stats,
-        }
+        result = await scheduler.sync_now()
+        logger.info("Job sync completed", extra_fields=result.get("stats", {}))
+        return result
 
     except Exception as e:
         logger.error(f"Job sync failed: {e}", extra_fields={"error": str(e)})
@@ -140,15 +133,18 @@ async def list_sources():
     """List all configured job sources."""
     logger.info("Listing job sources")
 
+    scheduler = get_scheduler()
+    sources = scheduler.job_manager.sources if scheduler else {}
+
     return {
         "sources": [
             {
                 "name": name,
                 "type": source.__class__.__name__,
             }
-            for name, source in job_manager.sources.items()
+            for name, source in sources.items()
         ],
-        "count": len(job_manager.sources),
+        "count": len(sources),
     }
 
 
@@ -174,7 +170,9 @@ async def add_rss_source(
 
     try:
         source = RSSJobSource(feed_url, name=name)
-        job_manager.add_source(source)
+        _sched = get_scheduler()
+        if _sched:
+            _sched.job_manager.add_source(source)
 
         return {
             "status": "success",
@@ -285,7 +283,9 @@ async def add_github_source(
         from ..services.job_sources import GitHubJobSource
 
         source = GitHubJobSource(access_token=access_token)
-        job_manager.add_source(source)
+        _sched = get_scheduler()
+        if _sched:
+            _sched.job_manager.add_source(source)
 
         logger.info(
             "GitHub source configured",
@@ -349,7 +349,9 @@ async def add_linkedin_source(
             client_id=client_id,
             client_secret=client_secret,
         )
-        job_manager.add_source(source)
+        _sched = get_scheduler()
+        if _sched:
+            _sched.job_manager.add_source(source)
 
         logger.info(
             "LinkedIn source configured",
@@ -401,7 +403,9 @@ async def add_angellist_source(
             raise ValueError("api_key is required")
 
         source = AngelListJobSource(api_key=api_key)
-        job_manager.add_source(source)
+        _sched = get_scheduler()
+        if _sched:
+            _sched.job_manager.add_source(source)
 
         return {
             "status": "success",
