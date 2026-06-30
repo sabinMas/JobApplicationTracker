@@ -203,7 +203,10 @@ class JobSourceManager:
                 existing_urls.add(job_listing.apply_url)
                 logger.debug(
                     f"Added job: {job_listing.title}",
-                    extra_fields={"source": source_name, "company": job_listing.company},
+                    extra_fields={
+                        "source": source_name,
+                        "company": job_listing.company,
+                    },
                 )
 
             except Exception as e:

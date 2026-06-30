@@ -62,7 +62,9 @@ async def list_jobs(
         base_query = base_query.where(Job.status == status)
 
     # Total count (without pagination)
-    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    count_result = await db.execute(
+        select(func.count()).select_from(base_query.subquery())
+    )
     total = count_result.scalar() or 0
 
     # Paginated results ordered by score desc (scored jobs first, NULLs last), then created_at desc
