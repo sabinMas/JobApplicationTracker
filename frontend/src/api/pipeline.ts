@@ -118,7 +118,7 @@ export const rejectApplication = (applicationId: number, rejectionReason?: strin
 
 export const getApplicationsInReview = (limit: number = 20, offset: number = 0) =>
   api
-    .get('/pipeline-visualizer/applications-in-review', {
+    .get('/pipeline-visualizer/jobs-for-review', {
       params: { limit, offset },
     })
-    .then(r => r.data)
+    .then(r => ({ applications: r.data }))

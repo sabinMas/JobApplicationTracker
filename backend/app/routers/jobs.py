@@ -9,7 +9,7 @@ Jobs management endpoints.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, nullslast
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -53,25 +53,29 @@ async def list_jobs(
         },
     )
 
-    query = select(Job)
+    base_query = select(Job)
 
     if source:
-        query = query.where(Job.source == source)
+        base_query = base_query.where(Job.source == source)
 
     if status:
-        query = query.where(Job.status == status)
+        base_query = base_query.where(Job.status == status)
 
-    # Order by created_at descending
-    query = query.order_by(desc(Job.created_at))
+    # Total count (without pagination)
+    count_result = await db.execute(
+        select(func.count()).select_from(base_query.subquery())
+    )
+    total = count_result.scalar() or 0
 
-    # Apply pagination
+    # Paginated results ordered by score desc (scored jobs first, NULLs last), then created_at desc
+    query = base_query.order_by(nullslast(desc(Job.score)), desc(Job.created_at))
     query = query.offset(skip).limit(limit)
 
     result = await db.execute(query)
     jobs = result.scalars().all()
 
     return {
-        "total": len(jobs),
+        "total": total,
         "skip": skip,
         "limit": limit,
         "jobs": [
@@ -86,6 +90,13 @@ async def list_jobs(
                 "apply_url": job.apply_url,
                 "posted_date": job.posted_date,
                 "created_at": job.created_at.isoformat() if job.created_at else None,
+                "score": job.score,
+                "score_reasoning": job.score_reasoning,
+                "score_strengths": job.score_strengths or [],
+                "score_concerns": job.score_concerns or [],
+                "score_recommendation": job.score_recommendation,
+                "scored_at": job.scored_at.isoformat() if job.scored_at else None,
+                "pipeline_stage": job.pipeline_stage,
             }
             for job in jobs
         ],
@@ -240,6 +251,13 @@ async def get_job(
         "status": job.status,
         "notes": job.notes,
         "created_at": job.created_at.isoformat() if job.created_at else None,
+        "score": job.score,
+        "score_reasoning": job.score_reasoning,
+        "score_strengths": job.score_strengths or [],
+        "score_concerns": job.score_concerns or [],
+        "score_recommendation": job.score_recommendation,
+        "scored_at": job.scored_at.isoformat() if job.scored_at else None,
+        "pipeline_stage": job.pipeline_stage,
     }
 
 
