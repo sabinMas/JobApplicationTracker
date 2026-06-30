@@ -13,6 +13,42 @@ from ...models import Job
 from ...database import AsyncSessionLocal
 from ...logging_config import get_logger
 
+# Broad tech/dev terms always considered relevant regardless of preferences.
+# Keeps the filter from being too aggressive when preferences aren't set.
+_BASE_TECH_TERMS: frozenset[str] = frozenset(
+    [
+        "developer",
+        "engineer",
+        "software",
+        "backend",
+        "frontend",
+        "full-stack",
+        "fullstack",
+        "full stack",
+        "web dev",
+        "javascript",
+        "typescript",
+        "python",
+        "node.js",
+        "nodejs",
+        "react",
+        "next.js",
+        "vue",
+        "angular",
+        "llm",
+        "ai trainer",
+        "machine learning",
+        "ml engineer",
+        "data labeling",
+        "geospatial",
+        "gis",
+        "rest api",
+        "devops",
+        "cloud engineer",
+        "site reliability",
+    ]
+)
+
 # Defer logger
 _logger = None
 
@@ -23,6 +59,40 @@ def get_logger_instance():
         get_logger_instance_actual = get_logger
         _logger = get_logger_instance_actual(__name__)
     return _logger
+
+
+def _build_relevance_terms(
+    must_have: list[str],
+    target_roles: list[str],
+) -> frozenset[str]:
+    """Combine preference keywords + base tech terms into a lowercase match set."""
+    terms: set[str] = set(_BASE_TECH_TERMS)
+    for kw in must_have or []:
+        terms.add(kw.lower())
+    for role in target_roles or []:
+        # "Full-Stack Web Developer" → also index each significant word individually
+        terms.add(role.lower())
+        for word in role.lower().split():
+            if len(word) > 3:
+                terms.add(word)
+    return frozenset(terms)
+
+
+def _is_relevant_job(
+    job_listing: "JobListing",
+    include_terms: frozenset[str],
+    exclude_terms: frozenset[str],
+) -> bool:
+    """Return True if the job title matches relevance criteria.
+
+    Checks the title only — descriptions are often HTML-heavy and unreliable for
+    quick filtering. Excluded if any avoid_keyword hits; included if any
+    include_term hits.
+    """
+    title_lower = job_listing.title.lower()
+    if any(term in title_lower for term in exclude_terms):
+        return False
+    return any(term in title_lower for term in include_terms)
 
 
 class JobSourceManager:
@@ -108,7 +178,8 @@ class JobSourceManager:
             "added": 0,
             "duplicates": 0,
             "errors": 0,
-            "limited": 0,  # Count of jobs not added due to discovery limit
+            "limited": 0,
+            "irrelevant": 0,  # Count of jobs skipped for not matching profile
         }
 
         # Collect all jobs with their source
@@ -124,8 +195,10 @@ class JobSourceManager:
             },
         )
 
-        # Load discovery limit from preferences
-        max_discovery_limit = 50  # Default
+        # Load preferences once for discovery limit + relevance filter
+        max_discovery_limit = 50
+        include_terms: frozenset[str] = _BASE_TECH_TERMS
+        exclude_terms: frozenset[str] = frozenset()
         try:
             from ...models import SearchPreferences
 
@@ -133,10 +206,18 @@ class JobSourceManager:
                 prefs = (
                     await session.execute(select(SearchPreferences))
                 ).scalar_one_or_none()
-                if prefs and prefs.max_jobs_per_discovery_run:
-                    max_discovery_limit = prefs.max_jobs_per_discovery_run
+                if prefs:
+                    if prefs.max_jobs_per_discovery_run:
+                        max_discovery_limit = prefs.max_jobs_per_discovery_run
+                    include_terms = _build_relevance_terms(
+                        prefs.must_have_keywords or [],
+                        prefs.target_roles or [],
+                    )
+                    exclude_terms = frozenset(
+                        kw.lower() for kw in (prefs.avoid_keywords or [])
+                    )
         except Exception as e:
-            logger.warning(f"Could not load discovery limit preference: {e}")
+            logger.warning(f"Could not load preferences: {e}")
 
         # Get existing job URLs to detect duplicates
         async with AsyncSessionLocal() as session:
@@ -157,6 +238,15 @@ class JobSourceManager:
             # Respect discovery limit
             if stats["added"] >= max_discovery_limit:
                 stats["limited"] += 1
+                continue
+
+            # Relevance pre-filter: skip jobs that don't match the user's profile
+            if not _is_relevant_job(job_listing, include_terms, exclude_terms):
+                stats["irrelevant"] += 1
+                logger.debug(
+                    f"Skipping irrelevant job: {job_listing.title}",
+                    extra_fields={"source": source_name, "title": job_listing.title},
+                )
                 continue
 
             # Check for duplicates within this sync
@@ -227,6 +317,7 @@ class JobSourceManager:
                 "duplicates": stats["duplicates"],
                 "errors": stats["errors"],
                 "limited": stats["limited"],
+                "irrelevant": stats["irrelevant"],
             },
         )
 
