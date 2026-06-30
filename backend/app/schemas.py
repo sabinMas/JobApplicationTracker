@@ -48,8 +48,7 @@ class SearchPreferencesUpdate(BaseModel):
     daily_application_limit: Optional[int] = None
     # Discovery Limits
     max_jobs_per_discovery_run: Optional[int] = None
-    max_jobs_to_score_per_run: Optional[int] = None
-    score_batch_size: Optional[int] = None
+    skip_previously_discovered: Optional[bool] = None
 
 
 class SearchPreferencesOut(SearchPreferencesUpdate):
