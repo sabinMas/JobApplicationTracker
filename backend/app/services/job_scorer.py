@@ -159,10 +159,27 @@ async def score_job(db: AsyncSession, job: Job) -> dict[str, Any]:
     return {
         "score": score,
         "reasoning": result.get("reasoning", ""),
-        "strengths": result.get("strengths", []),
-        "concerns": result.get("concerns", []),
+        "strengths": _coerce_to_list(result.get("strengths")),
+        "concerns": _coerce_to_list(result.get("concerns")),
         "recommendation": result.get("recommendation", "SKIP"),
     }
+
+
+def _coerce_to_list(value: Any) -> list[str]:
+    """Normalize the AI's strengths/concerns output to a list of strings.
+
+    The model isn't always strictly schema-compliant — it sometimes returns
+    a single newline/bullet-separated string instead of a JSON array. Store
+    a list either way so downstream Pydantic schemas (list[str]) don't choke.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        lines = [line.strip(" -*\t") for line in value.splitlines()]
+        return [line for line in lines if line]
+    return [str(value)]
 
 
 async def score_and_store(

@@ -79,7 +79,7 @@ async def score_all_jobs(
             )
 
         logger.info(
-            f"Found {len(jobs)} unscored jobs to score", extra={"count": len(jobs)}
+            f"Found {len(jobs)} unscored jobs to score", extra_fields={"count": len(jobs)}
         )
 
         scores = []
@@ -92,7 +92,7 @@ async def score_all_jobs(
                 logger.debug(f"Scored job {job.id}: {job.score}/10")
             except Exception as e:
                 error_msg = f"Error scoring job {job.id}: {str(e)}"
-                logger.error(error_msg, extra={"job_id": job.id})
+                logger.error(error_msg, extra_fields={"job_id": job.id})
                 errors += 1
 
         # Calculate statistics
@@ -117,7 +117,7 @@ async def score_all_jobs(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error in score_all_jobs", extra={"error": str(e)})
+        logger.error("Error in score_all_jobs", extra_fields={"error": str(e)})
         raise HTTPException(status_code=500, detail="Failed to score jobs")
 
 
@@ -189,7 +189,7 @@ async def get_high_score_jobs(
     except Exception as e:
         logger.error(
             "Error filtering high-score jobs",
-            extra={"error": str(e), "min_score": min_score},
+            extra_fields={"error": str(e), "min_score": min_score},
         )
         raise HTTPException(status_code=500, detail="Failed to filter jobs")
 
@@ -259,7 +259,7 @@ async def get_scoring_stats(
         )
 
     except Exception as e:
-        logger.error("Error getting scoring statistics", extra={"error": str(e)})
+        logger.error("Error getting scoring statistics", extra_fields={"error": str(e)})
         raise HTTPException(
             status_code=500, detail="Failed to retrieve scoring statistics"
         )

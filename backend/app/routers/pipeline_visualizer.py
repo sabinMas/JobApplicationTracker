@@ -40,6 +40,20 @@ PIPELINE_STAGES = [
 ]
 
 
+def _as_str_list(value) -> list[str]:
+    """Tolerate legacy rows where score_strengths/score_concerns were stored
+    as a raw string instead of a JSON list (older scoring runs weren't
+    strict about the AI's output shape) so PipelineJobOut validation never
+    500s on old data."""
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    if isinstance(value, str):
+        return [line.strip(" -*\t") for line in value.splitlines() if line.strip()]
+    return [str(value)]
+
+
 @router.get("/jobs", response_model=PipelineVisualizerOut)
 async def get_pipeline_jobs(
     stage: str = Query(None, description="Filter by pipeline stage"),
@@ -92,8 +106,8 @@ async def get_pipeline_jobs(
                         apply_url=job.apply_url,
                         score=job.score,
                         score_reasoning=job.score_reasoning,
-                        score_strengths=job.score_strengths or [],
-                        score_concerns=job.score_concerns or [],
+                        score_strengths=_as_str_list(job.score_strengths),
+                        score_concerns=_as_str_list(job.score_concerns),
                         pipeline_stage=job.pipeline_stage,
                         enrichment_data=job.enrichment_data,
                         pipeline_data=job.pipeline_data,
@@ -112,7 +126,7 @@ async def get_pipeline_jobs(
         )
 
     except Exception as e:
-        logger.error("Error fetching pipeline jobs", extra={"error": str(e)})
+        logger.error("Error fetching pipeline jobs", extra_fields={"error": str(e)})
         raise HTTPException(status_code=500, detail="Failed to fetch pipeline jobs")
 
 
@@ -153,8 +167,8 @@ async def get_jobs_for_review(
                 apply_url=job.apply_url,
                 score=job.score,
                 score_reasoning=job.score_reasoning,
-                score_strengths=job.score_strengths or [],
-                score_concerns=job.score_concerns or [],
+                score_strengths=_as_str_list(job.score_strengths),
+                score_concerns=_as_str_list(job.score_concerns),
                 pipeline_stage=job.pipeline_stage,
                 enrichment_data=job.enrichment_data,
                 pipeline_data=job.pipeline_data,
@@ -164,7 +178,7 @@ async def get_jobs_for_review(
         ]
 
     except Exception as e:
-        logger.error("Error fetching review jobs", extra={"error": str(e)})
+        logger.error("Error fetching review jobs", extra_fields={"error": str(e)})
         raise HTTPException(status_code=500, detail="Failed to fetch review jobs")
 
 
@@ -237,7 +251,7 @@ async def review_job(
         raise
     except Exception as e:
         logger.error(
-            "Error reviewing job", extra={"error": str(e), "job_id": request.job_id}
+            "Error reviewing job", extra_fields={"error": str(e), "job_id": request.job_id}
         )
         raise HTTPException(status_code=500, detail="Failed to process review")
 
@@ -281,7 +295,7 @@ async def update_job_stage(
         await db.commit()
         logger.info(
             f"Job {job_id} moved from {old_stage} to {update.pipeline_stage}",
-            extra={"job_id": job_id},
+            extra_fields={"job_id": job_id},
         )
         return {
             "status": "updated",
@@ -294,7 +308,7 @@ async def update_job_stage(
         raise
     except Exception as e:
         logger.error(
-            "Error updating job stage", extra={"error": str(e), "job_id": job_id}
+            "Error updating job stage", extra_fields={"error": str(e), "job_id": job_id}
         )
         raise HTTPException(status_code=500, detail="Failed to update job stage")
 
@@ -336,7 +350,7 @@ async def get_pipeline_stats(db: AsyncSession = Depends(get_db)) -> dict:
         }
 
     except Exception as e:
-        logger.error("Error getting pipeline stats", extra={"error": str(e)})
+        logger.error("Error getting pipeline stats", extra_fields={"error": str(e)})
         raise HTTPException(status_code=500, detail="Failed to get pipeline stats")
 
 
@@ -436,7 +450,7 @@ async def get_full_application_review(
         raise
     except Exception as e:
         logger.error(
-            f"Error fetching application for review: {e}", extra={"error": str(e)}
+            f"Error fetching application for review: {e}", extra_fields={"error": str(e)}
         )
         raise HTTPException(status_code=500, detail="Failed to fetch application")
 
@@ -491,7 +505,7 @@ async def approve_and_submit_application(
 
                 logger.info(
                     f"Application {application_id} approved and submitted successfully",
-                    extra={"job_id": job.id, "result": result.get("message")},
+                    extra_fields={"job_id": job.id, "result": result.get("message")},
                 )
 
                 return {
@@ -508,7 +522,7 @@ async def approve_and_submit_application(
 
                 logger.warning(
                     f"Application {application_id} submission encountered issues",
-                    extra={"job_id": job.id, "error": result.get("message")},
+                    extra_fields={"job_id": job.id, "error": result.get("message")},
                 )
 
                 return {
@@ -524,7 +538,7 @@ async def approve_and_submit_application(
 
             logger.error(
                 f"Error submitting application {application_id}: {e}",
-                extra={"job_id": job.id, "error": str(e)},
+                extra_fields={"job_id": job.id, "error": str(e)},
             )
 
             return {
@@ -536,7 +550,7 @@ async def approve_and_submit_application(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error approving application: {e}", extra={"error": str(e)})
+        logger.error(f"Error approving application: {e}", extra_fields={"error": str(e)})
         raise HTTPException(status_code=500, detail="Failed to approve application")
 
 
@@ -585,7 +599,7 @@ async def reject_application(
 
         logger.info(
             f"Application {application_id} rejected",
-            extra={"job_id": job.id, "reason": rejection_reason},
+            extra_fields={"job_id": job.id, "reason": rejection_reason},
         )
 
         return {
@@ -597,5 +611,5 @@ async def reject_application(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error rejecting application: {e}", extra={"error": str(e)})
+        logger.error(f"Error rejecting application: {e}", extra_fields={"error": str(e)})
         raise HTTPException(status_code=500, detail="Failed to reject application")

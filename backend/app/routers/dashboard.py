@@ -172,7 +172,7 @@ async def get_metrics(
 
     except Exception as e:
         logger.error(
-            "Error getting dashboard metrics", extra={"error": str(e), "days": days}
+            "Error getting dashboard metrics", extra_fields={"error": str(e), "days": days}
         )
         raise HTTPException(
             status_code=500, detail="Failed to retrieve dashboard metrics"
@@ -259,7 +259,7 @@ async def get_jobs_by_score(
     except Exception as e:
         logger.error(
             "Error filtering jobs by score",
-            extra={"error": str(e), "min_score": min_score, "max_score": max_score},
+            extra_fields={"error": str(e), "min_score": min_score, "max_score": max_score},
         )
         raise HTTPException(status_code=500, detail="Failed to filter jobs")
 
@@ -304,7 +304,7 @@ async def get_applications_timeline(
 
     except Exception as e:
         logger.error(
-            "Error getting application timeline", extra={"error": str(e), "days": days}
+            "Error getting application timeline", extra_fields={"error": str(e), "days": days}
         )
         raise HTTPException(status_code=500, detail="Failed to retrieve timeline data")
 
@@ -352,7 +352,7 @@ async def get_status_breakdown(
         )
 
     except Exception as e:
-        logger.error("Error getting status breakdown", extra={"error": str(e)})
+        logger.error("Error getting status breakdown", extra_fields={"error": str(e)})
         raise HTTPException(
             status_code=500, detail="Failed to retrieve status breakdown"
         )
