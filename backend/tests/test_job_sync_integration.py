@@ -167,7 +167,9 @@ async def test_scheduler_duplicate_handling():
             # On second run, add another job with same URL (duplicate)
             if self.run_number == 2:
                 jobs.append(JobListing(
-                    title="Same Job Title Different Description",
+                    # Title must pass the relevance pre-filter so this job
+                    # reaches the duplicate check (what this test verifies)
+                    title="Senior Python Engineer (Repost)",
                     company="TechCorp",
                     location="Remote",
                     job_type="full-time",
