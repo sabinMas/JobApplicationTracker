@@ -251,7 +251,8 @@ async def review_job(
         raise
     except Exception as e:
         logger.error(
-            "Error reviewing job", extra_fields={"error": str(e), "job_id": request.job_id}
+            "Error reviewing job",
+            extra_fields={"error": str(e), "job_id": request.job_id},
         )
         raise HTTPException(status_code=500, detail="Failed to process review")
 
@@ -450,7 +451,8 @@ async def get_full_application_review(
         raise
     except Exception as e:
         logger.error(
-            f"Error fetching application for review: {e}", extra_fields={"error": str(e)}
+            f"Error fetching application for review: {e}",
+            extra_fields={"error": str(e)},
         )
         raise HTTPException(status_code=500, detail="Failed to fetch application")
 
@@ -550,7 +552,9 @@ async def approve_and_submit_application(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error approving application: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Error approving application: {e}", extra_fields={"error": str(e)}
+        )
         raise HTTPException(status_code=500, detail="Failed to approve application")
 
 
@@ -611,5 +615,7 @@ async def reject_application(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error rejecting application: {e}", extra_fields={"error": str(e)})
+        logger.error(
+            f"Error rejecting application: {e}", extra_fields={"error": str(e)}
+        )
         raise HTTPException(status_code=500, detail="Failed to reject application")

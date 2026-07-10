@@ -79,7 +79,8 @@ async def score_all_jobs(
             )
 
         logger.info(
-            f"Found {len(jobs)} unscored jobs to score", extra_fields={"count": len(jobs)}
+            f"Found {len(jobs)} unscored jobs to score",
+            extra_fields={"count": len(jobs)},
         )
 
         scores = []
