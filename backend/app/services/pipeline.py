@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..database import AsyncSessionLocal
 from ..models import Application, Job, PipelineRun, SearchPreferences
 from . import job_scorer
 from .job_enrichment import enrich_high_scoring_jobs
@@ -177,13 +178,55 @@ async def _enqueue_auto_apply(application_id: int) -> None:
     logger.info(f"Enqueued auto-apply for application {application_id}")
 
 
+async def create_pipeline_run(trigger: str = "manual") -> PipelineRun:
+    """Create and persist a new PipelineRun row, then return immediately.
+
+    Uses its own short-lived session so the caller (an HTTP handler) isn't
+    left holding a pool connection while the actual pipeline runs.
+    """
+    async with AsyncSessionLocal() as db:
+        run = PipelineRun(trigger=trigger, status="running")
+        db.add(run)
+        await db.commit()
+        await db.refresh(run)
+    return run
+
+
+async def run_pipeline_background(run_id: int) -> None:
+    """Execute all pipeline stages for an already-created run.
+
+    Runs as a detached asyncio task with its own DB session. A full run
+    involves dozens of sequential AI calls (scoring + tailoring) and can
+    take several minutes — far longer than any HTTP gateway timeout — so
+    this must never run inside the request/response cycle.
+    """
+    async with AsyncSessionLocal() as db:
+        run = await db.get(PipelineRun, run_id)
+        if run is None:
+            logger.error(f"run_pipeline_background: PipelineRun {run_id} not found")
+            return
+        await _execute_pipeline(db, run)
+
+
 async def run_pipeline(db: AsyncSession, trigger: str = "manual") -> PipelineRun:
-    """Execute the full pipeline and return the PipelineRun summary."""
+    """Create a PipelineRun and execute it to completion on the given session.
+
+    Blocks until the full pipeline finishes. Intended for callers that are
+    already running off the request/response cycle (e.g. a worker/Lambda
+    invocation) — HTTP endpoints should use create_pipeline_run() +
+    run_pipeline_background() instead so they don't block on a multi-minute
+    run.
+    """
     run = PipelineRun(trigger=trigger, status="running")
     db.add(run)
     await db.commit()
     await db.refresh(run)
-    logger.info(f"Pipeline run {run.id} started (trigger={trigger})")
+    return await _execute_pipeline(db, run)
+
+
+async def _execute_pipeline(db: AsyncSession, run: PipelineRun) -> PipelineRun:
+    """Run every stage for `run` on `db` and persist the final summary."""
+    logger.info(f"Pipeline run {run.id} started (trigger={run.trigger})")
 
     prefs = (await db.execute(select(SearchPreferences))).scalar_one_or_none()
 

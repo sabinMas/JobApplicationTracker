@@ -3,22 +3,35 @@ Automated job application scheduler endpoint.
 Allows setting up criteria for automatic applications and managing job sync schedules.
 """
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..database import get_db
+from ..models import PipelineRun
 from ..schemas import PipelineRunOut
 from ..services.auto_scheduler import apply_to_matching_jobs
 from ..services.job_sync_scheduler import get_scheduler
-from ..services.pipeline import run_pipeline
+from ..services.pipeline import create_pipeline_run, run_pipeline_background
 from ..logging_config import get_logger
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/scheduler", tags=["scheduler"])
+
+# Tracks the in-process background task for the currently running pipeline,
+# so repeated "Run Now" clicks don't spawn overlapping runs that each hold a
+# DB connection for minutes and exhaust the pool.
+_pipeline_task: Optional[asyncio.Task] = None
+
+# If a PipelineRun is still "running" past this age, treat it as orphaned
+# (e.g. the process restarted mid-run) rather than blocking new runs forever.
+STALE_RUN_MINUTES = 20
 
 
 class JobCriteria(BaseModel):
@@ -64,12 +77,65 @@ async def apply_to_matching_now(
 @router.post("/run-pipeline", response_model=PipelineRunOut)
 async def trigger_pipeline(db: AsyncSession = Depends(get_db)):
     """
-    Run the full automation pipeline now:
+    Kick off the full automation pipeline now:
     discover → score → enrich → tailor → submit/queue-for-review.
 
-    This is the same flow the daily EventBridge schedule triggers.
+    This is the same flow the daily EventBridge schedule triggers. The
+    pipeline runs in the background and can take several minutes (it makes
+    dozens of sequential AI calls), so this endpoint returns immediately with
+    the new PipelineRun (status="running") rather than blocking until
+    completion — poll GET /scheduler/pipeline-runs for progress. If a run is
+    already in progress, that run is returned instead of starting another.
     """
-    return await run_pipeline(db, trigger="manual")
+    global _pipeline_task
+
+    if _pipeline_task is not None and not _pipeline_task.done():
+        current = (
+            (
+                await db.execute(
+                    select(PipelineRun)
+                    .where(PipelineRun.status == "running")
+                    .order_by(PipelineRun.started_at.desc())
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if current:
+            return current
+
+    # Clean up any "running" rows orphaned by a crashed/restarted process so
+    # they don't block new runs forever.
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=STALE_RUN_MINUTES)
+    stale_runs = (
+        (await db.execute(select(PipelineRun).where(PipelineRun.status == "running")))
+        .scalars()
+        .all()
+    )
+    for stale in stale_runs:
+        started = stale.started_at
+        if started and started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if started and started < stale_cutoff:
+            stale.status = "failed"
+            stale.finished_at = datetime.now(timezone.utc)
+            errors = list(stale.errors or [])
+            errors.append(
+                {
+                    "stage": "pipeline",
+                    "message": "Marked failed: exceeded stale-run timeout "
+                    f"({STALE_RUN_MINUTES}m), likely interrupted by a restart.",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            stale.errors = errors
+    if stale_runs:
+        await db.commit()
+
+    run = await create_pipeline_run(trigger="manual")
+    _pipeline_task = asyncio.create_task(run_pipeline_background(run.id))
+    logger.info(f"Pipeline run {run.id} triggered in background")
+    return run
 
 
 @router.get("/pipeline-runs", response_model=List[PipelineRunOut])
