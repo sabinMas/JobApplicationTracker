@@ -329,6 +329,32 @@ async def suggest_search_preferences(profile: dict) -> dict:
     )
 
 
+def _build_resume_header(profile: dict) -> str:
+    """Build the name/contact header deterministically from profile data.
+
+    The LLM rewrites the rest of the resume freely, but a generative rewrite
+    of the candidate's own name and links is unreliable (models have
+    introduced spelling drift, e.g. "Sabin" -> "Sabine", and placeholder
+    hrefs). Contact info is always rendered from the source of truth instead.
+    """
+    contact_parts = [
+        part
+        for part in (profile.get("location"), profile.get("phone"), profile.get("email"))
+        if part
+    ]
+    if profile.get("github_url"):
+        contact_parts.append(f"[GitHub]({profile['github_url']})")
+    if profile.get("linkedin_url"):
+        contact_parts.append(f"[LinkedIn]({profile['linkedin_url']})")
+    if profile.get("portfolio_url"):
+        contact_parts.append(f"[Portfolio]({profile['portfolio_url']})")
+
+    lines = [f"## {profile.get('full_name') or 'Candidate'}"]
+    if contact_parts:
+        lines.append(" | ".join(contact_parts))
+    return "\n".join(lines)
+
+
 async def tailor_resume(
     job_description: str,
     job_requirements: str,
@@ -344,6 +370,9 @@ async def tailor_resume(
         "- Mirror keywords from the job description naturally. "
         "- Keep all factual information accurate — do NOT invent experience. "
         "- Format output as clean markdown: use ## for sections, - for bullets. "
+        "- Do NOT include the candidate's name or contact info (email/phone/links) anywhere — "
+        "that header is added separately. Start directly with the first section "
+        "(e.g. PROFESSIONAL SUMMARY). "
         "Return only the tailored resume in markdown, no preamble."
     )
     user = (
@@ -351,7 +380,8 @@ async def tailor_resume(
         f"JOB REQUIREMENTS:\n{job_requirements[:2000]}\n\n"
         f"CANDIDATE RESUME:\n{base_resume_text[:4000]}"
     )
-    return await chat(system, user, temperature=0.4, tier="smart")
+    body = await chat(system, user, temperature=0.4, tier="smart")
+    return f"{_build_resume_header(profile)}\n\n---\n\n{body.strip()}"
 
 
 async def generate_cover_letter(
