@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "noEmit": true,
+    "types": ["node"],
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}

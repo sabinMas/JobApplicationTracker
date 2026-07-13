@@ -15,6 +15,7 @@ from ..logging_config import get_logger
 from ..models import Application, ApplicationMetric, Document, Job, Profile
 from .ats_integration import detect_ats_from_url
 from .ats_routers import route_and_submit
+from .notification_service import notify_application_submitted
 from .retry_service import calculate_next_retry_time, execute_with_retry
 
 logger = get_logger(__name__)
@@ -68,6 +69,14 @@ async def _perform_auto_apply(
         app.applied_date = datetime.now(timezone.utc)
         await db.commit()
         logger.info(f"Application {application_id} status updated to 'applied'")
+        await notify_application_submitted(
+            application_id=application_id,
+            job_title=job.title,
+            company=job.company,
+            apply_url=job.apply_url,
+            ats_platform=detect_ats_from_url(job.apply_url),
+            applied_at=app.applied_date.isoformat(),
+        )
 
     return result
 
