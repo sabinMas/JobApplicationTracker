@@ -339,7 +339,11 @@ def _build_resume_header(profile: dict) -> str:
     """
     contact_parts = [
         part
-        for part in (profile.get("location"), profile.get("phone"), profile.get("email"))
+        for part in (
+            profile.get("location"),
+            profile.get("phone"),
+            profile.get("email"),
+        )
         if part
     ]
     if profile.get("github_url"):
