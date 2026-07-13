@@ -79,6 +79,12 @@ async def get_pipeline_jobs(
         by_stage = {}
         jobs_by_stage = {}
 
+        # Application ids are unrelated to job ids (separate auto-increment
+        # sequences) -- fetch the mapping once so review-stage jobs can be
+        # linked to their application for the review modal.
+        app_rows = await db.execute(select(Application.job_id, Application.id))
+        application_ids_by_job = dict(app_rows.all())
+
         # Query jobs for each stage
         for stage_name in PIPELINE_STAGES:
             count_result = await db.execute(
@@ -112,6 +118,7 @@ async def get_pipeline_jobs(
                         enrichment_data=job.enrichment_data,
                         pipeline_data=job.pipeline_data,
                         created_at=job.created_at,
+                        application_id=application_ids_by_job.get(job.id),
                     )
                     for job in jobs
                 ]

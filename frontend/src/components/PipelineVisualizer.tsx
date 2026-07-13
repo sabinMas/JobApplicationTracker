@@ -163,6 +163,7 @@ interface JobCardProps {
 
 function JobCard({ job, isSelected, onSelect, stage, onApplicationClick }: JobCardProps) {
   const isReviewStage = stage === 'review'
+  const canOpenApplication = isReviewStage && job.application_id != null
 
   return (
     <div
@@ -170,8 +171,8 @@ function JobCard({ job, isSelected, onSelect, stage, onApplicationClick }: JobCa
         isSelected ? 'border-l-blue-500 bg-blue-50' : 'border-l-transparent'
       }`}
       onClick={() => {
-        if (isReviewStage && onApplicationClick) {
-          onApplicationClick(job.id)
+        if (canOpenApplication && onApplicationClick) {
+          onApplicationClick(job.application_id as number)
         } else {
           onSelect()
         }
@@ -197,7 +198,7 @@ function JobCard({ job, isSelected, onSelect, stage, onApplicationClick }: JobCa
               {formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}
             </p>
           )}
-          {isReviewStage && (
+          {canOpenApplication && (
             <p className="text-[10px] text-blue-600 font-semibold mt-1">→ Review</p>
           )}
         </div>
