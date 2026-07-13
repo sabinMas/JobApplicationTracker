@@ -6,6 +6,7 @@ import {
   getApplicationForReview,
   approveAndSubmitApplication,
   rejectApplication,
+  type PipelineJobOut,
 } from '../api/pipeline'
 
 export function JobReviewGate() {
@@ -24,10 +25,12 @@ export function JobReviewGate() {
 
   // Get full application data when one is selected
   const currentApp = appsData?.applications?.[currentAppIndex]
+  const currentApplicationId = currentApp?.application_id
   const { data: fullAppData, isLoading: appLoading } = useQuery({
-    queryKey: ['application-review', currentApp?.application_id],
-    queryFn: () => (currentApp ? getApplicationForReview(currentApp.application_id) : null),
-    enabled: !!currentApp,
+    queryKey: ['application-review', currentApplicationId],
+    queryFn: () =>
+      currentApplicationId ? getApplicationForReview(currentApplicationId) : null,
+    enabled: !!currentApplicationId,
   })
 
   const approveMutation = useMutation({
@@ -104,9 +107,9 @@ export function JobReviewGate() {
         <div className="card p-3 bg-gray-50 border border-gray-200 max-h-32 overflow-y-auto">
           <p className="text-xs font-semibold text-gray-600 mb-2">Other Applications</p>
           <div className="space-y-1">
-            {appsData.applications.map((app: any, idx: number) => (
+            {appsData.applications.map((app: PipelineJobOut, idx: number) => (
               <div
-                key={app.application_id}
+                key={app.application_id ?? app.id}
                 onClick={() => setCurrentAppIndex(idx)}
                 className={`text-xs p-2 rounded cursor-pointer transition ${
                   idx === currentAppIndex
@@ -114,7 +117,7 @@ export function JobReviewGate() {
                     : 'bg-white text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                {app.job_title} @ {app.company} ({app.score}/10)
+                {app.title} @ {app.company} ({app.score}/10)
               </div>
             ))}
           </div>

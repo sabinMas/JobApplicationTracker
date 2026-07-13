@@ -157,6 +157,16 @@ async def get_jobs_for_review(
         )
         jobs = result.scalars().all()
 
+        job_ids = [job.id for job in jobs]
+        application_ids_by_job = {}
+        if job_ids:
+            app_rows = await db.execute(
+                select(Application.job_id, Application.id).where(
+                    Application.job_id.in_(job_ids)
+                )
+            )
+            application_ids_by_job = dict(app_rows.all())
+
         return [
             PipelineJobOut(
                 id=job.id,
@@ -173,6 +183,7 @@ async def get_jobs_for_review(
                 enrichment_data=job.enrichment_data,
                 pipeline_data=job.pipeline_data,
                 created_at=job.created_at,
+                application_id=application_ids_by_job.get(job.id),
             )
             for job in jobs
         ]

@@ -382,6 +382,7 @@ class PipelineJobOut(BaseModel):
     enrichment_data: Optional[str] = None
     pipeline_data: Optional[dict] = None
     created_at: Optional[datetime] = None
+    application_id: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -30,6 +30,7 @@ export interface PipelineJobOut {
   enrichment_data?: string
   pipeline_data?: Record<string, any>
   created_at?: string
+  application_id?: number
 }
 
 export interface PipelineVisualizerOut {
@@ -118,7 +119,7 @@ export const rejectApplication = (applicationId: number, rejectionReason?: strin
 
 export const getApplicationsInReview = (limit: number = 20, offset: number = 0) =>
   api
-    .get('/pipeline-visualizer/jobs-for-review', {
+    .get<PipelineJobOut[]>('/pipeline-visualizer/jobs-for-review', {
       params: { limit, offset },
     })
     .then(r => ({ applications: r.data }))
